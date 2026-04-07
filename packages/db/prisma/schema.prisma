@@ -1,0 +1,256 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id               String           @id @default(cuid())
+  telegramId       String?          @unique
+  telegramUsername String?
+  firstName        String?
+  lastName         String?
+  phone            String?
+  roleAssignments  RoleAssignment[]
+  activityLogs     ActivityLog[]
+  carts            Cart[]
+  orders           Order[]
+  tradeInRequests  TradeInRequest[]
+  serviceRequests  ServiceRequest[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  code        String           @unique
+  name        String
+  assignments RoleAssignment[]
+}
+
+model RoleAssignment {
+  id     String @id @default(cuid())
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+}
+
+model Category {
+  id          String              @id @default(cuid())
+  name        String
+  slug        String              @unique
+  seoTitle    String?
+  seoDescription String?
+  products    Product[]
+  attributes  AttributeDefinition[]
+  filterSets  FilterSet[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
+model Product {
+  id          String           @id @default(cuid())
+  name        String
+  slug        String           @unique
+  sku         String           @unique
+  brand       String
+  imageUrl    String?
+  imageUrls   String[]         @default([])
+  seoTitle    String?
+  seoDescription String?
+  description String?
+  price       Decimal          @db.Decimal(10, 2)
+  inStock     Boolean          @default(true)
+  categoryId  String
+  category    Category         @relation(fields: [categoryId], references: [id])
+  attributes  ProductAttribute[]
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  telegramPosts TelegramPost[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model AttributeDefinition {
+  id          String             @id @default(cuid())
+  categoryId  String
+  category    Category           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  code        String
+  label       String
+  type        String
+  values      String[]
+  isFilterable Boolean           @default(true)
+  attributes  ProductAttribute[]
+
+  @@unique([categoryId, code])
+}
+
+model ProductAttribute {
+  id            String              @id @default(cuid())
+  productId     String
+  definitionId  String
+  product       Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  definition    AttributeDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  value         String
+
+  @@unique([productId, definitionId])
+}
+
+model FilterSet {
+  id         String   @id @default(cuid())
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name       String
+  config     Json
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String?
+  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  productId String
+  quantity  Int      @default(1)
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId])
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  userId      String?
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  status      String      @default("pending")
+  total       Decimal     @db.Decimal(10, 2)
+  customerName String
+  phone       String
+  note        String?
+  attribution Json?
+  items       OrderItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int
+  price     Decimal  @db.Decimal(10, 2)
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+}
+
+model TradeInRule {
+  id         String   @id @default(cuid())
+  brand      String
+  model      String
+  storage    String?
+  condition  String
+  price      Decimal  @db.Decimal(10, 2)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model TradeInRequest {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  customerName String
+  phone      String
+  brand      String
+  model      String
+  storage    String?
+  condition  String
+  quote      Decimal  @db.Decimal(10, 2)
+  note       String?
+  attribution Json?
+  status     String   @default("new")
+  createdAt  DateTime @default(now())
+}
+
+model ServicePriceTable {
+  id         String            @id @default(cuid())
+  version    Int               @default(1)
+  sourceFile String
+  isActive   Boolean           @default(false)
+  rows       ServicePriceRow[]
+  createdAt  DateTime          @default(now())
+}
+
+model ServicePriceRow {
+  id          String            @id @default(cuid())
+  tableId     String
+  table       ServicePriceTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  brand       String
+  model       String
+  repairType  String
+  price       Decimal           @db.Decimal(10, 2)
+}
+
+model ServiceRequest {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  customerName String
+  phone       String
+  brand       String
+  model       String
+  repairType  String
+  quote       Decimal  @db.Decimal(10, 2)
+  note        String?
+  attribution Json?
+  status      String   @default("new")
+  createdAt   DateTime @default(now())
+}
+
+model TelegramPost {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  deepLink    String
+  status      String   @default("draft")
+  createdAt   DateTime @default(now())
+}
+
+model FeatureFlag {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  enabled   Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  entityType String
+  entityId   String?
+  action     String
+  summary    String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}

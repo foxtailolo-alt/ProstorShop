@@ -1,0 +1,22 @@
+{
+  "name": "prostor-shop",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.7.0",
+  "scripts": {
+    "dev": "corepack pnpm --filter @prostor/web dev",
+    "dev:web": "corepack pnpm --filter @prostor/web dev",
+    "dev:bot": "corepack pnpm --filter @prostor/bot dev",
+    "build": "corepack pnpm -r --if-present build",
+    "db:generate": "corepack pnpm --filter @prostor/db prisma:generate",
+    "db:push": "corepack pnpm --filter @prostor/db exec prisma db push",
+    "lint": "corepack pnpm -r --if-present lint",
+    "seed": "corepack pnpm --filter @prostor/db seed",
+    "typecheck": "corepack pnpm -r --if-present typecheck",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3"
+  }
+}

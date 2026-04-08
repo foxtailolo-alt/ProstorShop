@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@prostor/db";
 import * as XLSX from "xlsx";
 import { logAdminActivity } from "../../../../lib/audit";
+import { requirePermission } from "../../../../lib/auth/session";
 
 const serviceRequestStatuses = new Set(["new", "contacted", "accepted", "completed", "cancelled"]);
 
@@ -62,6 +63,7 @@ function parseRows(buffer: Buffer, fileName: string) {
 }
 
 export async function importServicePricingAction(formData: FormData) {
+  await requirePermission("service", "write");
   const file = formData.get("priceFile");
 
   if (!(file instanceof File) || file.size === 0) {
@@ -117,6 +119,7 @@ export async function importServicePricingAction(formData: FormData) {
 }
 
 export async function updateServiceRequestStatusAction(formData: FormData) {
+  await requirePermission("service", "write");
   const requestId = String(formData.get("requestId") ?? "").trim();
   const status = String(formData.get("status") ?? "").trim();
 

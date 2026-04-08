@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { hasPermission, type AdminAction, type AdminResource } from "@prostor/core";
 import type { SessionUser } from "./types";
 
 const SESSION_COOKIE_NAME = "prostor_session";
@@ -114,4 +115,23 @@ export function isAdminSession(session: SessionPayload | null) {
   }
 
   return session.user.roles.some((role) => role !== "customer");
+}
+
+export function checkPermission(
+  session: SessionPayload | null,
+  resource: AdminResource,
+  action: AdminAction,
+): boolean {
+  if (!session) return false;
+  return session.user.roles.some(
+    (role) => role !== "customer" && hasPermission(role, resource, action),
+  );
+}
+
+export async function requirePermission(resource: AdminResource, action: AdminAction): Promise<SessionPayload> {
+  const session = await getSession();
+  if (!checkPermission(session, resource, action)) {
+    throw new Error("Недостаточно прав для выполнения этого действия.");
+  }
+  return session!;
 }

@@ -43,16 +43,19 @@ model RoleAssignment {
 }
 
 model Category {
-  id          String              @id @default(cuid())
-  name        String
-  slug        String              @unique
-  seoTitle    String?
+  id             String              @id @default(cuid())
+  name           String
+  slug           String              @unique
+  parentId       String?
+  parent         Category?           @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children       Category[]          @relation("CategoryTree")
+  seoTitle       String?
   seoDescription String?
-  products    Product[]
-  attributes  AttributeDefinition[]
-  filterSets  FilterSet[]
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  products       Product[]
+  attributes     AttributeDefinition[]
+  filterSets     FilterSet[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 }
 
 model Product {
@@ -66,6 +69,8 @@ model Product {
   seoTitle    String?
   seoDescription String?
   description String?
+  specs       Json?
+  options     Json?
   price       Decimal          @db.Decimal(10, 2)
   inStock     Boolean          @default(true)
   categoryId  String
@@ -74,8 +79,21 @@ model Product {
   cartItems   CartItem[]
   orderItems  OrderItem[]
   telegramPosts TelegramPost[]
+  recommendedBy  ProductRecommendation[] @relation("RecommendedProduct")
+  recommendations ProductRecommendation[] @relation("SourceProduct")
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
+}
+
+model ProductRecommendation {
+  id                String   @id @default(cuid())
+  sourceProductId   String
+  recommendedProductId String
+  position          Int      @default(0)
+  sourceProduct     Product  @relation("SourceProduct", fields: [sourceProductId], references: [id], onDelete: Cascade)
+  recommendedProduct Product @relation("RecommendedProduct", fields: [recommendedProductId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceProductId, recommendedProductId])
 }
 
 model AttributeDefinition {
@@ -232,6 +250,17 @@ model TelegramPost {
   deepLink    String
   status      String   @default("draft")
   createdAt   DateTime @default(now())
+}
+
+model Banner {
+  id        String   @id @default(cuid())
+  title     String?
+  imageUrl  String
+  linkUrl   String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model FeatureFlag {

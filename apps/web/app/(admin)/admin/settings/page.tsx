@@ -1,8 +1,18 @@
 import { getFeatureFlagEntries } from "../../../../lib/data/catalog";
+import { isMarketingMode } from "../../../../lib/auth/marketing";
 import { updateFeatureFlagAction } from "./actions";
 
+const marketingOnlyFlags = new Set(["yandexMetricaEnabled"]);
+
 export default async function AdminSettingsPage() {
-  const featureFlags = await getFeatureFlagEntries();
+  const [allFlags, marketingMode] = await Promise.all([
+    getFeatureFlagEntries(),
+    isMarketingMode(),
+  ]);
+
+  const featureFlags = marketingMode
+    ? allFlags
+    : allFlags.filter((flag) => !marketingOnlyFlags.has(flag.key));
 
   return (
     <main>

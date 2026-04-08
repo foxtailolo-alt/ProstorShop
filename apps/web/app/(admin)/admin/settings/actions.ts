@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@prostor/db";
 import { defaultFeatureFlags, type FeatureFlags } from "@prostor/core";
 import { logAdminActivity } from "../../../../lib/audit";
+import { requirePermission } from "../../../../lib/auth/session";
 
 export async function updateFeatureFlagAction(formData: FormData) {
+  await requirePermission("settings", "write");
   const key = String(formData.get("key") ?? "") as keyof FeatureFlags;
   const enabled = formData.get("enabled") === "on";
 

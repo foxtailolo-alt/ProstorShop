@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 type ProductCardMediaProps = {
   images: string[];
@@ -10,43 +10,50 @@ type ProductCardMediaProps = {
 
 export function ProductCardMedia({ images, productName, badge }: ProductCardMediaProps) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const touchStartRef = useRef(0);
 
-  const clearCycle = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
-
-  const startCycle = useCallback(() => {
+  function handleMouseMove(e: React.MouseEvent) {
     if (images.length <= 1) return;
-    clearCycle();
-    intervalRef.current = setInterval(() => {
-      setActiveIndex((prev) => (prev + 1) % images.length);
-    }, 3000);
-  }, [images.length, clearCycle]);
-
-  useEffect(() => {
-    return clearCycle;
-  }, [clearCycle]);
-
-  function handleMouseEnter() {
-    startCycle();
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = e.clientX - rect.left;
+    const pct = x / rect.width;
+    const idx = Math.min(Math.floor(pct * images.length), images.length - 1);
+    if (idx !== activeIndex) setActiveIndex(idx);
   }
 
   function handleMouseLeave() {
-    clearCycle();
     setActiveIndex(0);
+  }
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartRef.current = e.touches[0]?.clientX ?? 0;
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (images.length <= 1) return;
+    const delta = touchStartRef.current - (e.changedTouches[0]?.clientX ?? 0);
+    if (Math.abs(delta) > 30) {
+      e.preventDefault();
+      setActiveIndex((prev) =>
+        delta > 0
+          ? (prev + 1) % images.length
+          : (prev - 1 + images.length) % images.length,
+      );
+    }
   }
 
   const currentImage = images[activeIndex] ?? images[0];
 
   return (
     <div
+      ref={containerRef}
       className="product-card-media"
-      onMouseEnter={handleMouseEnter}
+      onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       {currentImage ? (
         <img src={currentImage} alt={productName} loading="lazy" />

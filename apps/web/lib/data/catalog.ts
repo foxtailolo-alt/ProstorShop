@@ -97,9 +97,11 @@ function mapDbProduct(record: DbProductRecord): CatalogProduct {
   const primaryImageUrl = imageUrls[0] ?? record.imageUrl ?? seedProduct?.imageUrl;
 
   const specs =
-    record.attributes.length > 0
-      ? Object.fromEntries(record.attributes.map((item) => [item.definition.label, item.value]))
-      : (seedProduct?.specs ?? {});
+    record.specs && typeof record.specs === "object" && !Array.isArray(record.specs) && Object.keys(record.specs).length > 0
+      ? (record.specs as Record<string, string>)
+      : record.attributes.length > 0
+        ? Object.fromEntries(record.attributes.map((item) => [item.definition.label, item.value]))
+        : (seedProduct?.specs ?? {});
 
   const attributes =
     record.attributes.length > 0
@@ -176,6 +178,45 @@ export async function findCatalogProductBySlug(productSlug: string) {
   return products.find((product) => product.slug === productSlug) ?? null;
 }
 
+export async function getProductRecommendations(productSlug: string) {
+  if (!databaseConfigured()) return [];
+  const product = await safeQuery(() =>
+    prisma.product.findUnique({
+      where: { slug: productSlug },
+      select: {
+        recommendations: {
+          orderBy: { position: "asc" },
+          select: {
+            recommendedProduct: {
+              include: { category: true, attributes: { include: { definition: true } } },
+            },
+          },
+        },
+      },
+    }),
+  );
+  if (!product || product.recommendations.length === 0) return [];
+  return product.recommendations.map((r) => mapDbProduct(r.recommendedProduct));
+}
+
+type ProductOptionsData = {
+  groups: { name: string; values: string[] }[];
+  allVariants: boolean;
+  variants?: { name: string; price: number }[];
+  prices?: Record<string, Record<string, number>>;
+};
+
+export async function getProductOptions(productSlug: string): Promise<ProductOptionsData | null> {
+  if (!databaseConfigured()) return null;
+  const product = await safeQuery(() =>
+    prisma.product.findUnique({ where: { slug: productSlug }, select: { options: true } }),
+  );
+  if (!product?.options || typeof product.options !== "object") return null;
+  const opts = product.options as Record<string, unknown>;
+  if (!Array.isArray(opts.groups) || opts.groups.length === 0) return null;
+  return product.options as ProductOptionsData;
+}
+
 export async function getCatalogSummaryData() {
   const [categories, products] = await Promise.all([listCatalogCategories(), listCatalogProducts()]);
 
@@ -218,4 +259,16 @@ export async function getRuntimeFeatureFlags(): Promise<FeatureFlags> {
     }),
     { ...defaultFeatureFlags },
   );
+}
+
+export async function listActiveBanners() {
+  const dbBanners = await safeQuery(() =>
+    prisma.banner.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: "asc" },
+      take: 5,
+    }),
+  );
+
+  return dbBanners ?? [];
 }

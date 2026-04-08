@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@prostor/db";
 import { logAdminActivity } from "../../../../lib/audit";
+import { requirePermission } from "../../../../lib/auth/session";
 import { saveProductImages } from "../../../../lib/media";
 
 const maxProductImageCount = 10;
@@ -28,6 +29,7 @@ function slugify(value: string) {
 }
 
 export async function upsertProductAction(formData: FormData) {
+  await requirePermission("products", "write");
   const productId = String(formData.get("productId") ?? "").trim();
   const originalSku = String(formData.get("originalSku") ?? "").trim();
   const sku = String(formData.get("sku") ?? "").trim();
@@ -43,6 +45,27 @@ export async function upsertProductAction(formData: FormData) {
   const seoDescription = String(formData.get("seoDescription") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const inStock = formData.get("inStock") === "on";
+  const specsRaw = String(formData.get("specs") ?? "").trim();
+  let specs: Record<string, string> | undefined = undefined;
+  if (specsRaw) {
+    try {
+      const parsed = JSON.parse(specsRaw);
+      if (typeof parsed === "object" && !Array.isArray(parsed) && Object.keys(parsed).length > 0) {
+        specs = parsed;
+      }
+    } catch { /* ignore invalid JSON */ }
+  }
+
+  const optionsRaw = String(formData.get("options") ?? "").trim();
+  let optionsValue: string | undefined = undefined;
+  if (optionsRaw) {
+    try {
+      const parsed = JSON.parse(optionsRaw);
+      if (typeof parsed === "object" && !Array.isArray(parsed) && parsed?.groups?.length > 0) {
+        optionsValue = optionsRaw; // valid JSON string to pass through
+      }
+    } catch { /* ignore invalid JSON */ }
+  }
 
   if (!sku || !name || !brand || !categorySlug || !Number.isFinite(price) || price <= 0) {
     throw new Error("Product form is incomplete.");
@@ -103,6 +126,8 @@ export async function upsertProductAction(formData: FormData) {
           seoTitle: seoTitle || null,
           seoDescription: seoDescription || null,
           description,
+          specs,
+          options: optionsValue ? JSON.parse(optionsValue) : undefined,
           inStock,
           categoryId: category.id,
         },
@@ -119,10 +144,33 @@ export async function upsertProductAction(formData: FormData) {
           seoTitle: seoTitle || null,
           seoDescription: seoDescription || null,
           description,
+          specs,
+          options: optionsValue ? JSON.parse(optionsValue) : undefined,
           inStock,
           categoryId: category.id,
         },
       });
+
+  // Sync recommended products
+  const recommendedIdsRaw = String(formData.get("recommendedIds") ?? "").trim();
+  const recommendedIds = recommendedIdsRaw
+    ? recommendedIdsRaw.split(",").filter(Boolean)
+    : [];
+
+  await prisma.productRecommendation.deleteMany({
+    where: { sourceProductId: savedProduct.id },
+  });
+
+  if (recommendedIds.length > 0) {
+    await prisma.productRecommendation.createMany({
+      data: recommendedIds.map((recId, index) => ({
+        sourceProductId: savedProduct.id,
+        recommendedProductId: recId,
+        position: index,
+      })),
+      skipDuplicates: true,
+    });
+  }
 
   await logAdminActivity({
     entityType: "product",
@@ -142,10 +190,11 @@ export async function upsertProductAction(formData: FormData) {
   revalidatePath("/admin");
   revalidatePath("/admin/activity");
   revalidatePath("/catalog");
-  redirect(`/admin/products?edit=${encodeURIComponent(savedProduct.sku)}`);
+  redirect("/admin/products");
 }
 
 export async function deleteProductAction(formData: FormData) {
+  await requirePermission("products", "delete");
   const sku = String(formData.get("sku") ?? "").trim();
 
   if (!sku) {
@@ -171,6 +220,7 @@ export async function deleteProductAction(formData: FormData) {
 }
 
 export async function toggleProductStockAction(formData: FormData) {
+  await requirePermission("products", "write");
   const sku = String(formData.get("sku") ?? "").trim();
   const current = String(formData.get("current") ?? "false") === "true";
 
@@ -198,6 +248,7 @@ export async function toggleProductStockAction(formData: FormData) {
 }
 
 export async function updateProductAttributeAction(formData: FormData) {
+  await requirePermission("products", "write");
   const sku = String(formData.get("sku") ?? "").trim();
   const code = String(formData.get("code") ?? "").trim();
   const value = String(formData.get("value") ?? "").trim();
@@ -274,6 +325,7 @@ export async function updateProductAttributeAction(formData: FormData) {
 }
 
 export async function reorderProductImagesAction(formData: FormData) {
+  await requirePermission("products", "write");
   const sku = String(formData.get("sku") ?? "").trim();
   const orderedUrls = JSON.parse(String(formData.get("imageUrls") ?? "[]")) as string[];
 
@@ -300,6 +352,7 @@ export async function reorderProductImagesAction(formData: FormData) {
 }
 
 export async function deleteProductImageAction(formData: FormData) {
+  await requirePermission("products", "write");
   const sku = String(formData.get("sku") ?? "").trim();
   const imageUrl = String(formData.get("imageUrl") ?? "").trim();
 

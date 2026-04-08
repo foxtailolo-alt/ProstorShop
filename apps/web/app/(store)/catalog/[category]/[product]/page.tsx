@@ -4,9 +4,10 @@ import { notFound } from "next/navigation";
 import { catalogProducts } from "@prostor/core";
 import { StoreNav } from "../../../../../components/layout/store-nav";
 import { buildAbsoluteUrl } from "../../../../../lib/seo";
-import { findCatalogCategory, findCatalogProduct } from "../../../../../lib/data/catalog";
+import { findCatalogCategory, findCatalogProduct, getProductRecommendations, getProductOptions } from "../../../../../lib/data/catalog";
 import { addToCartAction } from "../../../cart/actions";
 import { ProductGallery } from "../../../../../components/product/product-gallery";
+import { ProductInfoWithOptions } from "../../../../../components/product/product-info-options";
 
 type ProductPageProps = {
   params: Promise<{
@@ -56,6 +57,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
     notFound();
   }
 
+  const recommendations = await getProductRecommendations(currentProduct.slug);
+  const productOptions = await getProductOptions(currentProduct.slug);
+
   const productImages = currentProduct.imageUrls?.length
     ? currentProduct.imageUrls
     : currentProduct.imageUrl
@@ -104,26 +108,41 @@ export default async function ProductPage({ params }: ProductPageProps) {
             <h1 className="product-page-title">{currentProduct.name}</h1>
             <p className="product-page-summary">{currentProduct.summary}</p>
 
-            <div className="product-page-price-block">
-              <span className="product-page-price">{currentProduct.price.toLocaleString("ru-RU")} ₽</span>
-              {currentProduct.compareAtPrice ? (
-                <span className="product-card-old-price">{currentProduct.compareAtPrice.toLocaleString("ru-RU")} ₽</span>
-              ) : null}
-              {currentProduct.badge ? <span className="product-card-badge-inline">{currentProduct.badge}</span> : null}
-            </div>
+            {productOptions?.groups?.length ? (
+              <ProductInfoWithOptions
+                options={productOptions}
+                basePrice={currentProduct.price}
+                compareAtPrice={currentProduct.compareAtPrice}
+                badge={currentProduct.badge}
+                inStock={currentProduct.inStock}
+                slug={currentProduct.slug}
+                categorySlug={currentCategory.slug}
+                addToCartAction={addToCartAction}
+              />
+            ) : (
+              <>
+                <div className="product-page-price-block">
+                  <span className="product-page-price">{currentProduct.price.toLocaleString("ru-RU")} ₽</span>
+                  {currentProduct.compareAtPrice ? (
+                    <span className="product-card-old-price">{currentProduct.compareAtPrice.toLocaleString("ru-RU")} ₽</span>
+                  ) : null}
+                  {currentProduct.badge ? <span className="product-card-badge-inline">{currentProduct.badge}</span> : null}
+                </div>
 
-            <div className="product-page-stock">
-              {currentProduct.inStock ? "✓ В наличии" : "Под заказ"}
-            </div>
+                <div className="product-page-stock">
+                  {currentProduct.inStock ? "✓ В наличии" : "Под заказ"}
+                </div>
 
-            <form action={addToCartAction} className="product-page-actions">
-              <input type="hidden" name="productSlug" value={currentProduct.slug} />
-              <input type="hidden" name="quantity" value="1" />
-              <input type="hidden" name="redirectTo" value={`/catalog/${currentCategory.slug}/${currentProduct.slug}`} />
-              <button className="button button-primary button-lg" type="submit">
-                Добавить в корзину
-              </button>
-            </form>
+                <form action={addToCartAction} className="product-page-actions">
+                  <input type="hidden" name="productSlug" value={currentProduct.slug} />
+                  <input type="hidden" name="quantity" value="1" />
+                  <input type="hidden" name="redirectTo" value={`/catalog/${currentCategory.slug}/${currentProduct.slug}`} />
+                  <button className="button button-primary button-lg" type="submit">
+                    Добавить в корзину
+                  </button>
+                </form>
+              </>
+            )}
 
             <div className="product-page-highlights">
               {currentProduct.highlights.map((item) => (
@@ -145,6 +164,37 @@ export default async function ProductPage({ params }: ProductPageProps) {
           ))}
         </div>
       </section>
+
+      {recommendations.length > 0 && (
+        <section className="store-section">
+          <h2 className="store-section-title">Рекомендуемые товары</h2>
+          <div className="grid grid-4">
+            {recommendations.map((rec) => {
+              const recImage = rec.imageUrls?.[0] ?? rec.imageUrl;
+              return (
+                <Link
+                  key={rec.sku}
+                  href={`/catalog/${rec.categorySlug}/${rec.slug}`}
+                  className="product-card glass"
+                >
+                  {recImage ? (
+                    <div className="product-card-media">
+                      <img src={recImage} alt={rec.name} className="product-card-image" loading="lazy" />
+                    </div>
+                  ) : (
+                    <div className="product-card-media product-card-media-empty" />
+                  )}
+                  <div className="product-card-body">
+                    <span className="product-card-brand">{rec.brand}</span>
+                    <span className="product-card-name">{rec.name}</span>
+                    <span className="product-card-price">{rec.price.toLocaleString("ru-RU")} ₽</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </main>
   );
 }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@prostor/db";
 import { logAdminActivity } from "../../../../lib/audit";
+import { requirePermission } from "../../../../lib/auth/session";
 
 function slugify(value: string) {
   return value
@@ -71,11 +72,13 @@ async function syncCategoryFilters(categoryId: string) {
 }
 
 export async function upsertCategoryAction(formData: FormData) {
+  await requirePermission("categories", "write");
   const categoryId = String(formData.get("categoryId") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
   const slugInput = String(formData.get("slug") ?? "").trim();
   const seoTitle = String(formData.get("seoTitle") ?? "").trim();
   const seoDescription = String(formData.get("seoDescription") ?? "").trim();
+  const parentId = String(formData.get("parentId") ?? "").trim() || null;
   const slug = slugInput ? slugify(slugInput) : slugify(name);
 
   if (!name || !slug) {
@@ -85,10 +88,10 @@ export async function upsertCategoryAction(formData: FormData) {
   const category = categoryId
     ? await prisma.category.update({
         where: { id: categoryId },
-        data: { name, slug, seoTitle: seoTitle || null, seoDescription: seoDescription || null },
+        data: { name, slug, parentId, seoTitle: seoTitle || null, seoDescription: seoDescription || null },
       })
     : await prisma.category.create({
-        data: { name, slug, seoTitle: seoTitle || null, seoDescription: seoDescription || null },
+        data: { name, slug, parentId, seoTitle: seoTitle || null, seoDescription: seoDescription || null },
       });
 
   await syncCategoryFilters(category.id);
@@ -108,6 +111,7 @@ export async function upsertCategoryAction(formData: FormData) {
 }
 
 export async function deleteCategoryAction(formData: FormData) {
+  await requirePermission("categories", "delete");
   const categoryId = String(formData.get("categoryId") ?? "").trim();
 
   if (!categoryId) {
@@ -138,6 +142,7 @@ export async function deleteCategoryAction(formData: FormData) {
 }
 
 export async function upsertAttributeAction(formData: FormData) {
+  await requirePermission("categories", "write");
   const categoryId = String(formData.get("categoryId") ?? "").trim();
   const codeInput = String(formData.get("code") ?? "").trim();
   const label = String(formData.get("label") ?? "").trim();
@@ -190,6 +195,7 @@ export async function upsertAttributeAction(formData: FormData) {
 }
 
 export async function deleteAttributeAction(formData: FormData) {
+  await requirePermission("categories", "delete");
   const attributeId = String(formData.get("attributeId") ?? "").trim();
   const categoryId = String(formData.get("categoryId") ?? "").trim();
 

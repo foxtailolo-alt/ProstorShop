@@ -3,9 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@prostor/db";
 import { logAdminActivity } from "../../../../lib/audit";
+import { requirePermission } from "../../../../lib/auth/session";
 import { buildMiniAppProductUrl, sendTelegramPost } from "../../../../lib/telegram";
 
 export async function publishTelegramPostAction(formData: FormData) {
+  await requirePermission("telegram-posts", "write");
   const productSlug = String(formData.get("productSlug") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();

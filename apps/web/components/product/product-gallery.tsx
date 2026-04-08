@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type ProductGalleryProps = {
   images: string[];
@@ -10,6 +10,7 @@ type ProductGalleryProps = {
 export function ProductGallery({ images, productName }: ProductGalleryProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const touchStartRef = useRef(0);
 
   const closeLightbox = useCallback(() => setLightboxOpen(false), []);
 
@@ -38,6 +39,18 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
     };
   }, [lightboxOpen, closeLightbox, goTo]);
 
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartRef.current = e.touches[0]?.clientX ?? 0;
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (images.length <= 1) return;
+    const delta = touchStartRef.current - (e.changedTouches[0]?.clientX ?? 0);
+    if (Math.abs(delta) > 40) {
+      goTo(delta > 0 ? 1 : -1);
+    }
+  }
+
   if (images.length === 0) {
     return (
       <div className="product-media product-media-large">
@@ -52,6 +65,8 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
         <div
           className="product-media product-media-large product-media-clickable"
           onClick={() => setLightboxOpen(true)}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => e.key === "Enter" && setLightboxOpen(true)}
@@ -77,7 +92,12 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
 
       {lightboxOpen ? (
         <div className="lightbox-overlay" onClick={closeLightbox}>
-          <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="lightbox-content"
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
             {images.length > 1 ? (
               <button
                 type="button"

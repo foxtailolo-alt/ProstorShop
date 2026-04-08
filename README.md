@@ -115,23 +115,26 @@ infra/
 - Prisma schema connected to PostgreSQL/Neon with seed data for categories, products, trade-in rules, service pricing, feature flags, and roles.
 - Telegram authentication flow for production plus localhost-only dev login for admins when Telegram widget rejects local domain.
 - Role-aware admin area with operational dashboard instead of a presentation-style mock.
-- Admin product management backed by database records, including editing existing products and safe SKU updates.
-- Product media expanded from single image to gallery model with support for up to 10 images per product.
-- Admin image gallery management: visible order, delete controls, reorder controls, and gallery previews.
-- Storefront product gallery: clickable thumbnails, active image switching, and lightbox overlay.
-- Product card media component with hover-based image cycling and visual dots for multi-image cards.
+- Admin product management with modal dialog: create/edit, category tree select, recommendation picker, auto-generated SKU.
+- Product specs editor with AI auto-fill via OpenAI Responses API (`web_search_preview` tool for factual data from the internet).
+- Product options system: configurable option groups (e.g. "Storage", "SIM type") with per-variant or additive pricing and storefront option picker with dynamic price updates.
+- Product media: gallery model with up to 10 images, admin image gallery manager with reorder/delete, storefront lightbox gallery.
+- Product card media: cursor-position-based image switching on hover (left→right = first→last photo).
+- Product recommendations: schema, admin picker, storefront display section.
+- Banner carousel: admin CRUD (up to 5 active), storefront auto-rotating slider with swipe support. Recommended banner size: 2100×900px (21:9).
+- Tree-based category management with `parentId` self-relation and browsable subcategories.
 - Trade-in and service request flows writing to the database.
 - Attribution middleware and Yandex Metrica integration groundwork.
 - Basic SEO foundation: metadata, sitemap, robots, canonical URLs.
+- Vitest test suite for permissions, pricing, attribution, and session logic.
 
 ### Remaining Work
 
-- Validate the hover slideshow thoroughly on all catalog surfaces and polish edge cases on touch devices.
-- Finish remaining admin modules to the same operational level as products and dashboard.
-- Add real Telegram post publishing workflow in production with channel/group verification and operator UX.
+- Validate product options flow end-to-end on storefront (option selection → cart → order).
+- Add real Telegram post publishing workflow in production with channel/group verification.
 - Harden checkout/admin workflows with more audit coverage, error states, and operator feedback.
 - Add deployment runbook details for VPS, backups, media persistence, and process management.
-- Add smoke tests/regression checks for auth, cart, product media, and admin product flows.
+- Expand test coverage for product options, specs AI, banner CRUD, and cart with variants.
 
 ## Next Session Handoff
 
@@ -140,16 +143,22 @@ infra/
 - Root business model is now a real store, not a static showcase.
 - Database is PostgreSQL on Neon, Prisma schema is already pushed, and seed data exists.
 - `Product.imageUrls` is the active gallery field; first image is treated as primary image.
+- `Product.specs Json?` stores key-value characteristics filled via AI or manually.
+- `Product.options Json?` stores option groups with variant/additive pricing model.
+- `Banner` model with admin CRUD and storefront carousel already implemented.
 - Older products may still need defensive fallback to `imageUrl`, so gallery code must preserve backward compatibility.
 - Local admin login exists only for localhost development and must not be exposed in production flows.
 - Uploaded product images are stored under `apps/web/public/uploads/products`.
+- OpenAI API key is configured in `.env.local` as `OPENAI_API_KEY`.
+- AI specs endpoint uses Responses API (`/v1/responses`) with `web_search_preview` tool for factual data.
 
 ### Next Recommended Steps
 
-1. Run a final UI smoke pass for multi-image behavior on home, catalog, category, and product pages.
-2. Finish admin polish for orders, trade-in, service requests, and Telegram posting workflow.
-3. Add minimal regression coverage around auth, cart, product media ordering, and admin product editing.
-4. Prepare deployment checklist for VPS with backups and media persistence.
+1. Validate product options flow: option selection → price update → add to cart → order item with variant info.
+2. Polish admin UX: inline feedback on save, loading states, validation errors.
+3. Add regression tests for product options, specs AI endpoint, and banner management.
+4. Implement Telegram bot posting workflow with deep links.
+5. Prepare deployment checklist for VPS with backups and media persistence.
 
 ## Build Order
 

@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { prisma } from "@prostor/db";
 import { getAuditMetadataEntries } from "../../../../lib/audit";
+import { AdminPagination, PAGE_SIZE } from "../../../../components/admin/admin-pagination";
 
 type AdminActivityPageProps = {
   searchParams?: Promise<{
     entity?: string;
     action?: string;
+    page?: string;
   }>;
 };
 
@@ -13,19 +15,22 @@ export default async function AdminActivityPage({ searchParams }: AdminActivityP
   const params = searchParams ? await searchParams : undefined;
   const entityFilter = params?.entity?.trim();
   const actionFilter = params?.action?.trim();
+  const currentPage = Math.max(1, Number(params?.page) || 1);
   const where = {
     ...(entityFilter ? { entityType: entityFilter } : {}),
     ...(actionFilter ? { action: actionFilter } : {}),
   };
 
-  const [logs, recentLogs] = await Promise.all([
+  const [totalCount, logs, recentLogs] = await Promise.all([
+    prisma.activityLog.count({ where }),
     prisma.activityLog.findMany({
       where,
       orderBy: { createdAt: "desc" },
       include: {
         user: true,
       },
-      take: 100,
+      skip: (currentPage - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
     }),
     prisma.activityLog.findMany({
       orderBy: { createdAt: "desc" },
@@ -36,6 +41,8 @@ export default async function AdminActivityPage({ searchParams }: AdminActivityP
       take: 300,
     }),
   ]);
+
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   const entityCounts = Array.from(
     recentLogs.reduce((accumulator, log) => {
@@ -81,7 +88,7 @@ export default async function AdminActivityPage({ searchParams }: AdminActivityP
               <Link
                 key={entityType}
                 className={`button ${entityFilter === entityType ? "button-primary" : "button-secondary"}`}
-                href={`/admin/activity?entity=${encodeURIComponent(entityType)}`}
+                href={`/admin/activity?entity=${encodeURIComponent(entityType)}` as "/"}
               >
                 {entityType} ({count})
               </Link>
@@ -95,7 +102,7 @@ export default async function AdminActivityPage({ searchParams }: AdminActivityP
               <Link
                 key={action}
                 className={`button ${actionFilter === action ? "button-primary" : "button-secondary"}`}
-                href={`/admin/activity?action=${encodeURIComponent(action)}`}
+                href={`/admin/activity?action=${encodeURIComponent(action)}` as "/"}
               >
                 {action} ({count})
               </Link>
@@ -105,7 +112,7 @@ export default async function AdminActivityPage({ searchParams }: AdminActivityP
       </section>
 
       <section style={{ marginTop: 18 }} className="card glass">
-        <div className="section-label">Последние действия</div>
+        <div className="section-label">Последние действия ({totalCount})</div>
         <div className="admin-table">
           <div className="admin-table-row admin-table-head">
             <div>Когда</div>
@@ -147,6 +154,17 @@ export default async function AdminActivityPage({ searchParams }: AdminActivityP
             </div>
           ))}
         </div>
+        {totalPages > 1 && (
+          <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "center", marginTop: 16 }}>
+            {currentPage > 1 && (
+              <Link href={`/admin/activity?${new URLSearchParams({ ...(entityFilter ? { entity: entityFilter } : {}), ...(actionFilter ? { action: actionFilter } : {}), page: String(currentPage - 1) }).toString()}` as "/"} className="button button-secondary button-sm">← Назад</Link>
+            )}
+            <span style={{ fontSize: 13, color: "var(--muted)" }}>{currentPage} / {totalPages}</span>
+            {currentPage < totalPages && (
+              <Link href={`/admin/activity?${new URLSearchParams({ ...(entityFilter ? { entity: entityFilter } : {}), ...(actionFilter ? { action: actionFilter } : {}), page: String(currentPage + 1) }).toString()}` as "/"} className="button button-secondary button-sm">Вперёд →</Link>
+            )}
+          </div>
+        )}
       </section>
     </main>
   );

@@ -13,10 +13,13 @@
     "lint": "corepack pnpm -r --if-present lint",
     "seed": "corepack pnpm --filter @prostor/db seed",
     "typecheck": "corepack pnpm -r --if-present typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "format": "prettier --write ."
   },
   "devDependencies": {
     "prettier": "^3.5.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.3"
   }
 }

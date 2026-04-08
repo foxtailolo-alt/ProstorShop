@@ -3,10 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@prostor/db";
 import { logAdminActivity } from "../../../../lib/audit";
+import { requirePermission } from "../../../../lib/auth/session";
 
 const tradeInRequestStatuses = new Set(["new", "contacted", "diagnostics", "completed", "cancelled"]);
 
 export async function upsertTradeInRuleAction(formData: FormData) {
+  await requirePermission("trade-in", "write");
   const brand = String(formData.get("brand") ?? "").trim();
   const model = String(formData.get("model") ?? "").trim();
   const storage = String(formData.get("storage") ?? "").trim() || null;
@@ -38,6 +40,7 @@ export async function upsertTradeInRuleAction(formData: FormData) {
 }
 
 export async function deleteTradeInRuleAction(formData: FormData) {
+  await requirePermission("trade-in", "delete");
   const brand = String(formData.get("brand") ?? "").trim();
   const model = String(formData.get("model") ?? "").trim();
   const storage = String(formData.get("storage") ?? "").trim() || null;
@@ -60,6 +63,7 @@ export async function deleteTradeInRuleAction(formData: FormData) {
 }
 
 export async function updateTradeInRequestStatusAction(formData: FormData) {
+  await requirePermission("trade-in", "write");
   const requestId = String(formData.get("requestId") ?? "").trim();
   const status = String(formData.get("status") ?? "").trim();
 

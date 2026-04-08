@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@prostor/db": "workspace:*",
     "telegraf": "^4.16.3"
   },
   "devDependencies": {

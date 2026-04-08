@@ -27,6 +27,50 @@ export const adminRoles = ["owner", "manager", "editor", "viewer"] as const;
 
 export type AdminRole = (typeof adminRoles)[number];
 
+export const adminResources = [
+  "products",
+  "categories",
+  "banners",
+  "orders",
+  "trade-in",
+  "service",
+  "telegram-posts",
+  "settings",
+  "activity",
+  "marketing",
+] as const;
+
+export type AdminResource = (typeof adminResources)[number];
+
+export type AdminAction = "read" | "write" | "delete";
+
+const rolePermissions: Record<AdminRole, Record<AdminAction, AdminResource[]>> = {
+  owner: {
+    read: [...adminResources],
+    write: [...adminResources],
+    delete: [...adminResources],
+  },
+  manager: {
+    read: [...adminResources],
+    write: ["products", "categories", "banners", "orders", "trade-in", "service", "telegram-posts", "marketing"],
+    delete: ["products", "categories", "banners", "trade-in"],
+  },
+  editor: {
+    read: ["products", "categories", "banners", "orders", "trade-in", "service", "activity"],
+    write: ["products", "categories", "banners"],
+    delete: ["products", "banners"],
+  },
+  viewer: {
+    read: ["products", "categories", "banners", "orders", "trade-in", "service", "activity"],
+    write: [],
+    delete: [],
+  },
+};
+
+export function hasPermission(role: AdminRole, resource: AdminResource, action: AdminAction): boolean {
+  return rolePermissions[role][action].includes(resource);
+}
+
 export const customerPainPoints = [
   "Long registration before action",
   "Weak mobile UX",

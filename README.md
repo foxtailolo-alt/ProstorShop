@@ -114,9 +114,15 @@ infra/
 - Next.js storefront with homepage, catalog, category pages, product pages, cart, trade-in page, service page, and Telegram Mini App entry page.
 - Prisma schema connected to PostgreSQL/Neon with seed data for categories, products, trade-in rules, service pricing, feature flags, and roles.
 - Telegram authentication flow for production plus localhost-only dev login for admins when Telegram widget rejects local domain.
+- Profile area with Telegram login fallback, loyalty balance, order history, stored phone, and per-user referral promo code.
+- Promo and loyalty system in Prisma: `PromoCode`, `PointTransaction`, order promo linkage, cashback tracking, and referral owner rewards.
+- Cart/order flow with product variants, stored per-item price snapshot, promo apply/clear, and variant-aware order items.
+- Admin order workflow with cashback accrual on completion, referral reward accrual, promo visibility, and profile revalidation.
 - Role-aware admin area with operational dashboard instead of a presentation-style mock.
 - Admin product management with modal dialog: create/edit, category tree select, recommendation picker, auto-generated SKU.
+- Admin product UX hardening: inline save errors, success feedback, image manager sync, and catalog revalidation after image changes.
 - Product specs editor with AI auto-fill via OpenAI Responses API (`web_search_preview` tool for factual data from the internet).
+- AI specs endpoint supports direct OpenAI or internal proxy mode via `OPENAI_PROXY_URL` and `OPENAI_PROXY_SECRET`.
 - Product options system: configurable option groups (e.g. "Storage", "SIM type") with per-variant or additive pricing and storefront option picker with dynamic price updates.
 - Product media: gallery model with up to 10 images, admin image gallery manager with reorder/delete, storefront lightbox gallery.
 - Product card media: cursor-position-based image switching on hover (left→right = first→last photo).
@@ -124,17 +130,22 @@ infra/
 - Banner carousel: admin CRUD (up to 5 active), storefront auto-rotating slider with swipe support. Recommended banner size: 2100×900px (21:9).
 - Tree-based category management with `parentId` self-relation and browsable subcategories.
 - Trade-in and service request flows writing to the database.
+- Telegram bot deep links now open the Mini App directly, support `startapp` product context, and configure the menu button.
+- Telegram post publishing now returns operator-friendly errors instead of failing silently.
+- Backup login flow for the owner via `/api/auth/bootstrap-login` guarded by `AUTH_BOOTSTRAP_SECRET`.
 - Attribution middleware and Yandex Metrica integration groundwork.
 - Basic SEO foundation: metadata, sitemap, robots, canonical URLs.
-- Vitest test suite for permissions, pricing, attribution, and session logic.
+- Production deployment to VPS is live on `https://88-218-64-61.sslip.io`, and Telegram login was fixed to use the real HTTPS domain instead of localhost.
+- Safe production packaging and env guards exist: `corepack pnpm deploy:pack` and `corepack pnpm --filter @prostor/web build:prod`.
+- Vitest coverage expanded for banners, cart variants, AI specs route, and cart-selection helpers.
 
 ### Remaining Work
 
-- Validate product options flow end-to-end on storefront (option selection → cart → order).
-- Add real Telegram post publishing workflow in production with channel/group verification.
-- Harden checkout/admin workflows with more audit coverage, error states, and operator feedback.
-- Add deployment runbook details for VPS, backups, media persistence, and process management.
-- Expand test coverage for product options, specs AI, banner CRUD, and cart with variants.
+- Deploy the latest repo changes to the VPS so server-side `build:prod` and the new safety scripts exist on the host, not only locally.
+- Run a full post-deploy smoke check for the live stack: `/login`, `/profile`, cart promo flow, referral promo flow, Telegram post deep links, and Mini App launch from bot.
+- Apply and document the Prisma migration path for production instead of relying only on `db push` as the schema continues to grow.
+- Finish production setup for Telegram posting and verify the target channel/group permissions with the current bot token.
+- Add a tracked, non-secret example for the AI proxy env and document the proxy service start/restart flow.
 
 ## Next Session Handoff
 
@@ -146,19 +157,27 @@ infra/
 - `Product.specs Json?` stores key-value characteristics filled via AI or manually.
 - `Product.options Json?` stores option groups with variant/additive pricing model.
 - `Banner` model with admin CRUD and storefront carousel already implemented.
-- Older products may still need defensive fallback to `imageUrl`, so gallery code must preserve backward compatibility.
+- Orders now persist `variantLabel`, `appliedPromoCodeId`, `promoRewardDescription`, and `cashbackPointsAwarded`.
+- `User` now stores `phone` and `loyaltyPoints`; referral promo creation happens automatically on Telegram login.
+- Promo cookie handling lives in `apps/web/lib/promo.ts` and must stay signed with `AUTH_SESSION_SECRET`.
+- Mini App product deep links are centralized in `packages/core/src/telegram.ts` and reused by bot/web code.
+- Production public URLs must come from `/home/deploy/ProstorShop/.env`; `apps/web/.env.local` must not exist on the VPS.
+- `scripts/assert-public-env.mjs` blocks unsafe production builds, and `scripts/build-deploy-archive.mjs` creates the safe release tarball.
+- The live site already serves the correct login domain `https://88-218-64-61.sslip.io`.
+- The VPS cleanup was done: `/home/deploy/ProstorShop/apps/web/.env.local` was removed.
+- The new safety scripts are still local-only until the latest repo revision is deployed to the server.
 - Local admin login exists only for localhost development and must not be exposed in production flows.
 - Uploaded product images are stored under `apps/web/public/uploads/products`.
-- OpenAI API key is configured in `.env.local` as `OPENAI_API_KEY`.
 - AI specs endpoint uses Responses API (`/v1/responses`) with `web_search_preview` tool for factual data.
+- `infra/ai-proxy/server.py` exists locally, but its real `proxy.env` must stay outside git.
 
 ### Next Recommended Steps
 
-1. Validate product options flow: option selection → price update → add to cart → order item with variant info.
-2. Polish admin UX: inline feedback on save, loading states, validation errors.
-3. Add regression tests for product options, specs AI endpoint, and banner management.
-4. Implement Telegram bot posting workflow with deep links.
-5. Prepare deployment checklist for VPS with backups and media persistence.
+1. Ship the current commit to the VPS, rebuild with `corepack pnpm --filter @prostor/web build:prod`, and verify both `prostor-web` and `prostor-bot` restart cleanly.
+2. Run production smoke tests for login, profile, cart with variants, promo application, cashback accrual, and Telegram Mini App entry.
+3. Replace the real proxy env file with a committed example file and document service management for `infra/ai-proxy`.
+4. Add one more test pass for promo/referral flows and admin order completion to reduce regression risk around loyalty logic.
+5. Convert the evolving schema changes into proper Prisma migrations before the next structural database update.
 
 ## Build Order
 
@@ -188,6 +207,8 @@ infra/
 - Next.js app managed by `systemd` or `pm2`.
 - Reverse proxy via `Caddy` or `Nginx`.
 - Backups handled at PostgreSQL and uploaded media level.
+- Build production releases with `corepack pnpm deploy:pack` so local `.env` files and `.next` output are not shipped.
+- On the VPS, keep production public URLs only in `/home/deploy/ProstorShop/.env` and remove `apps/web/.env.local` before `build:prod`.
 
 ## Media Handling
 

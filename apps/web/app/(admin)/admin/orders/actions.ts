@@ -16,9 +16,83 @@ export async function updateOrderStatusAction(formData: FormData) {
     throw new Error("Order status update is invalid.");
   }
 
-  await prisma.order.update({
-    where: { id: orderId },
-    data: { status },
+  await prisma.$transaction(async (transaction) => {
+    const order = await transaction.order.findUnique({
+      where: { id: orderId },
+      include: {
+        appliedPromoCode: true,
+        pointTransactions: true,
+      },
+    });
+
+    if (!order) {
+      throw new Error("Order was not found.");
+    }
+
+    await transaction.order.update({
+      where: { id: orderId },
+      data: { status },
+    });
+
+    if (order.status === "completed" || status !== "completed") {
+      return;
+    }
+
+    const existingCashback = order.pointTransactions.find((entry) => entry.kind === "cashback");
+    const cashbackPoints = order.userId && !existingCashback ? Math.floor(Number(order.total) * 0.01) : 0;
+
+    if (order.userId && cashbackPoints > 0) {
+      await transaction.user.update({
+        where: { id: order.userId },
+        data: {
+          loyaltyPoints: {
+            increment: cashbackPoints,
+          },
+          pointTransactions: {
+            create: {
+              orderId: order.id,
+              amount: cashbackPoints,
+              kind: "cashback",
+              description: `Кешбэк 1% за заказ ${order.id}`,
+            },
+          },
+        },
+      });
+
+      await transaction.order.update({
+        where: { id: order.id },
+        data: {
+          cashbackPointsAwarded: cashbackPoints,
+        },
+      });
+    }
+
+    const existingReferralReward = order.pointTransactions.find((entry) => entry.kind === "promo_referral_owner");
+    const referralOwnerId = order.appliedPromoCode?.ownerUserId;
+    const referralPercent = Number(order.appliedPromoCode?.ownerCashbackPercent ?? 0);
+    const referralPoints = referralOwnerId && !existingReferralReward
+      ? Math.floor(Number(order.total) * (referralPercent / 100))
+      : 0;
+
+    if (referralOwnerId && referralOwnerId !== order.userId && referralPoints > 0) {
+      await transaction.user.update({
+        where: { id: referralOwnerId },
+        data: {
+          loyaltyPoints: {
+            increment: referralPoints,
+          },
+          pointTransactions: {
+            create: {
+              orderId: order.id,
+              promoCodeId: order.appliedPromoCode?.id,
+              amount: referralPoints,
+              kind: "promo_referral_owner",
+              description: `Награда за использование промокода ${order.appliedPromoCode?.code}`,
+            },
+          },
+        },
+      });
+    }
   });
 
   await logAdminActivity({
@@ -32,4 +106,5 @@ export async function updateOrderStatusAction(formData: FormData) {
   revalidatePath("/admin");
   revalidatePath("/admin/orders");
   revalidatePath("/admin/activity");
+  revalidatePath("/profile");
 }

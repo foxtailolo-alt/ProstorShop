@@ -1,3 +1,5 @@
+import { buildTelegramMiniAppLaunchUrl } from "@prostor/core";
+
 type TelegramReplyMarkup = {
   inline_keyboard: Array<Array<{ text: string; url: string }>>;
 };
@@ -12,13 +14,30 @@ function getRequiredEnv(name: string) {
   return value;
 }
 
-export function buildMiniAppProductUrl(productSlug: string) {
+export function buildMiniAppUrl(productSlug?: string) {
   const baseUrl = process.env.TELEGRAM_MINI_APP_URL ?? `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/mini-app`;
   const url = new URL(baseUrl);
-  url.searchParams.set("product", productSlug);
-  url.searchParams.set("source", "telegram-post");
+
+  if (productSlug) {
+    url.searchParams.set("product", productSlug);
+    url.searchParams.set("source", "telegram-post");
+  }
 
   return url.toString();
+}
+
+export function buildMiniAppProductUrl(productSlug: string) {
+  const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME?.trim();
+
+  if (!botUsername) {
+    return buildMiniAppUrl(productSlug);
+  }
+
+  return buildTelegramMiniAppLaunchUrl({
+    botUsername,
+    shortName: process.env.TELEGRAM_MINI_APP_SHORT_NAME,
+    startParam: productSlug,
+  });
 }
 
 export async function sendTelegramPost(input: {

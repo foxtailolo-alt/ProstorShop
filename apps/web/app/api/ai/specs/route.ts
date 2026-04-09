@@ -1,11 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "../../../../lib/auth/session";
 
+function getOpenAiProxyUrl() {
+  return process.env.OPENAI_PROXY_URL?.trim() ?? "";
+}
+
+function getOpenAiEndpoint() {
+  const proxyUrl = getOpenAiProxyUrl();
+
+  if (proxyUrl) {
+    return new URL("/openai/responses", proxyUrl).toString();
+  }
+
+  return "https://api.openai.com/v1/responses";
+}
+
+function getOpenAiHeaders(apiKey?: string) {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  const proxySecret = process.env.OPENAI_PROXY_SECRET?.trim();
+  const proxyUrl = getOpenAiProxyUrl();
+
+  if (proxyUrl) {
+    if (proxySecret) {
+      headers["X-Proxy-Secret"] = proxySecret;
+    }
+
+    return headers;
+  }
+
+  headers.Authorization = `Bearer ${apiKey}`;
+  return headers;
+}
+
 export async function POST(request: NextRequest) {
   await requirePermission("products", "write");
 
+  const proxyUrl = getOpenAiProxyUrl();
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
+
+  if (!proxyUrl && !apiKey) {
     return NextResponse.json({ error: "OPENAI_API_KEY not configured" }, { status: 500 });
   }
 
@@ -30,19 +66,18 @@ export async function POST(request: NextRequest) {
 5. Включи 8-15 ключевых характеристик
 6. Ответ — ТОЛЬКО валидный JSON объект, без markdown, без пояснений`;
 
+  const payload = {
+    model: "gpt-4o-mini",
+    input: prompt,
+    tools: [{ type: "web_search_preview" }],
+    temperature: 0,
+  };
+
   // Use Responses API with web_search tool for factual data
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetch(getOpenAiEndpoint(), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      input: prompt,
-      tools: [{ type: "web_search_preview" }],
-      temperature: 0,
-    }),
+    headers: getOpenAiHeaders(apiKey),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {

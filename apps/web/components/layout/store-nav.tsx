@@ -1,16 +1,20 @@
 import Link from "next/link";
+import type { Route } from "next";
 import { siteConfig } from "@prostor/core";
+import { getSession, isAdminSession } from "../../lib/auth/session";
 import { getCartItems } from "../../lib/cart";
 import { getRuntimeFeatureFlags } from "../../lib/data/catalog";
 import { getNavigation } from "../../lib/site";
 
 export async function StoreNav() {
-  const [featureFlags, cartItems] = await Promise.all([
+  const [featureFlags, cartItems, session] = await Promise.all([
     getRuntimeFeatureFlags(),
     getCartItems(),
+    getSession(),
   ]);
 
   const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const canOpenAdmin = session ? isAdminSession(session) : false;
   const navigation = getNavigation(featureFlags).map((item) =>
     item.href === "/cart" && cartCount > 0
       ? { ...item, label: `Корзина (${cartCount})` }
@@ -27,10 +31,15 @@ export async function StoreNav() {
               {item.label}
             </Link>
           ))}
+          <Link href={"/profile" as Route}>
+            {session ? "Профиль" : "Войти"}
+          </Link>
         </div>
-        <Link href="/admin" className="button button-secondary button-sm nav-admin-link">
-          Админка
-        </Link>
+        {canOpenAdmin ? (
+          <Link href="/admin" className="button button-secondary button-sm nav-admin-link">
+            Админка
+          </Link>
+        ) : null}
       </div>
     </nav>
   );

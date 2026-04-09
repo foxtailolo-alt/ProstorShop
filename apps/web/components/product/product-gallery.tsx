@@ -31,11 +31,9 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
     }
 
     document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
 
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
     };
   }, [lightboxOpen, closeLightbox, goTo]);
 

@@ -64,6 +64,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
             product: true,
           },
         },
+        appliedPromoCode: true,
         user: true,
       },
     }),
@@ -108,9 +109,20 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
                     <>
                       {order.items.map((item) => (
                         <div key={item.id} className="muted">
-                          {item.product.name} x {item.quantity}
+                          {item.product.name}
+                          {item.variantLabel ? ` (${item.variantLabel})` : ""} x {item.quantity}
+                          {` — ${Number(item.price).toLocaleString("ru-RU")} ₽`}
                         </div>
                       ))}
+                      {order.appliedPromoCode ? (
+                        <div className="muted">
+                          Промокод: {order.appliedPromoCode.code}
+                          {order.promoRewardDescription ? ` (${order.promoRewardDescription})` : ""}
+                        </div>
+                      ) : null}
+                      {order.cashbackPointsAwarded > 0 ? (
+                        <div className="muted">Начислено баллов: {order.cashbackPointsAwarded}</div>
+                      ) : null}
                       {order.note ? <div className="muted">{order.note}</div> : null}
                     </>
                   ) : (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ProductModal } from "./product-modal";
 import { ConfirmButton } from "../../../../components/admin/confirm-button";
@@ -44,7 +44,8 @@ type Props = {
   categories: CategoryNode[];
   allProductOptions: ProductOption[];
   editSku: string | null;
-  upsertAction: (formData: FormData) => void;
+  saveMessage: string | null;
+  upsertAction: (state: { error: string | null }, formData: FormData) => Promise<{ error: string | null }>;
   toggleStockAction: (formData: FormData) => void;
   deleteAction: (formData: FormData) => void;
 };
@@ -54,6 +55,7 @@ export function ProductsGrid({
   categories,
   allProductOptions,
   editSku,
+  saveMessage,
   upsertAction,
   toggleStockAction,
   deleteAction,
@@ -64,6 +66,34 @@ export function ProductsGrid({
 
   const [modalOpen, setModalOpen] = useState(!!editSku);
   const [editingProduct, setEditingProduct] = useState<ProductRecord | null>(initialProduct);
+
+  useEffect(() => {
+    if (!editSku) {
+      return;
+    }
+
+    const nextProduct = products.find((product) => product.sku === editSku) ?? null;
+    setEditingProduct(nextProduct);
+    setModalOpen(Boolean(nextProduct));
+  }, [editSku, products]);
+
+  useEffect(() => {
+    if (!editingProduct) {
+      return;
+    }
+
+    const nextProduct = products.find((product) => product.id === editingProduct.id) ?? null;
+
+    if (!nextProduct) {
+      setEditingProduct(null);
+      setModalOpen(false);
+      return;
+    }
+
+    if (nextProduct !== editingProduct) {
+      setEditingProduct(nextProduct);
+    }
+  }, [editingProduct, products]);
 
   function openNew() {
     setEditingProduct(null);
@@ -110,6 +140,17 @@ export function ProductsGrid({
           </button>
         </div>
       </section>
+
+      {saveMessage ? (
+        <section style={{ marginTop: 16 }}>
+          <div className="added-notice glass">
+            <span>{saveMessage}</span>
+            <Link href="/admin/products" className="button button-secondary button-sm">
+              Скрыть
+            </Link>
+          </div>
+        </section>
+      ) : null}
 
       <section style={{ marginTop: 16 }}>
         <div className="admin-product-grid">
@@ -175,6 +216,7 @@ export function ProductsGrid({
       </section>
 
       <ProductModal
+        key={editingProduct?.id ?? "new"}
         open={modalOpen}
         product={modalData}
         categories={categories}

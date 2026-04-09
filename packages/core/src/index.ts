@@ -1,6 +1,7 @@
 import { z } from "zod";
 export * from "./catalog";
 export * from "./pricing";
+export * from "./telegram";
 
 export const siteConfig = {
   name: "ProstorShop",

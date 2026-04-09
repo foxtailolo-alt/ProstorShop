@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { BootstrapLoginCard } from "../../components/auth/bootstrap-login-card";
 import { DevLoginCard } from "../../components/auth/dev-login-card";
 import { TelegramLoginWidget } from "../../components/auth/telegram-login-widget";
 import { getSession, isAdminSession } from "../../lib/auth/session";
@@ -18,6 +19,7 @@ function getLocalAdminIds() {
 type LoginPageProps = {
   searchParams: Promise<{
     redirect?: string;
+    bootstrapError?: string;
   }>;
 };
 
@@ -25,6 +27,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const [session, attribution] = await Promise.all([getSession(), getAttributionSnapshot()]);
   const params = await searchParams;
   const target = params.redirect?.startsWith("/") ? params.redirect : "/admin";
+  const bootstrapError = typeof params.bootstrapError === "string" ? params.bootstrapError : undefined;
   const attributionEntries = getAttributionEntries(attribution);
   const localAdminIds = getLocalAdminIds();
 
@@ -53,7 +56,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       </section>
 
       <div style={{ marginTop: 18 }}>
-        <TelegramLoginWidget />
+        <TelegramLoginWidget redirectToDefault="/admin" />
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        <BootstrapLoginCard redirectTo={target} error={bootstrapError} />
       </div>
 
       <div style={{ marginTop: 18 }}>

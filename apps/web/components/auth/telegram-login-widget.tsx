@@ -12,16 +12,42 @@ declare global {
 }
 
 const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME;
+const publicSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;
 
-export function TelegramLoginWidget() {
+function isIpHost(hostname: string) {
+  return /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname);
+}
+
+export function TelegramLoginWidget({ redirectToDefault = "/admin" }: { redirectToDefault?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  const [hostError, setHostError] = useState<string | null>(null);
   const redirectTo = searchParams.get("redirect")?.startsWith("/")
     ? searchParams.get("redirect")
-    : "/admin";
+    : redirectToDefault;
 
   useEffect(() => {
+    const currentUrl = new URL(window.location.href);
+    const configuredUrl = publicSiteUrl ? new URL(publicSiteUrl) : null;
+
+    if (currentUrl.protocol !== "https:" && currentUrl.hostname !== "localhost") {
+      setHostError("Telegram Login работает только по HTTPS. Откройте сайт по защищённому домену.");
+      return;
+    }
+
+    if (isIpHost(currentUrl.hostname)) {
+      setHostError("Telegram Login не работает на IP-адресе. Нужен домен, привязанный к боту в BotFather.");
+      return;
+    }
+
+    if (configuredUrl && currentUrl.host !== configuredUrl.host) {
+      setHostError("Откройте авторизацию на основном домене сайта. Telegram сверяет домен страницы с доменом бота.");
+      return;
+    }
+
+    setHostError(null);
+
     window.onTelegramAuth = async (user) => {
       try {
         setError(null);
@@ -60,6 +86,20 @@ export function TelegramLoginWidget() {
           Укажите `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME` и `TELEGRAM_BOT_TOKEN`, чтобы включить вход
           через Telegram widget.
         </p>
+      </div>
+    );
+  }
+
+  if (hostError) {
+    return (
+      <div className="card glass auth-card">
+        <div className="section-label">Вход через Telegram</div>
+        <p>{hostError}</p>
+        {publicSiteUrl ? (
+          <p>
+            Рабочий адрес для входа: <a href={publicSiteUrl}>{publicSiteUrl}</a>
+          </p>
+        ) : null}
       </div>
     );
   }

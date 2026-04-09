@@ -25,7 +25,12 @@ export async function publishTelegramPostAction(formData: FormData) {
 
   const buttonUrl = buildMiniAppProductUrl(product.slug);
   const text = [`<b>${title}</b>`, description, `Цена: <b>${Number(product.price).toLocaleString("ru-RU")} ₽</b>`].join("\n\n");
-  await sendTelegramPost({ text, buttonText: ctaText, buttonUrl, imageUrl: product.imageUrl });
+
+  try {
+    await sendTelegramPost({ text, buttonText: ctaText, buttonUrl, imageUrl: product.imageUrl });
+  } catch {
+    throw new Error("Не удалось опубликовать пост в Telegram. Проверьте настройки бота и доступ к каналу.");
+  }
 
   const post = await prisma.telegramPost.create({
     data: {

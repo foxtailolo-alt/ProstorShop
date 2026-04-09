@@ -12,6 +12,7 @@ type AdminProductsPageProps = {
     edit?: string;
     q?: string;
     page?: string;
+    saved?: string;
   }>;
 };
 
@@ -105,6 +106,7 @@ export default async function AdminProductsPage({ searchParams }: AdminProductsP
         categories={rootCategories}
         allProductOptions={productOptions}
         editSku={params.edit ?? null}
+        saveMessage={params.saved ? `Товар ${params.saved} сохранен.` : null}
         upsertAction={upsertProductAction}
         toggleStockAction={toggleProductStockAction}
         deleteAction={deleteProductAction}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type ProductOptionsData = {
   groups: Array<{ name: string; values: string[] }>;
@@ -25,31 +25,30 @@ export function ProductOptionPicker({ options, basePrice, onPriceChange, onVaria
     return defaults;
   });
 
-  function handleSelect(groupName: string, value: string) {
-    const next = { ...selected, [groupName]: value };
-    setSelected(next);
-
+  useEffect(() => {
     if (options.allVariants && options.variants) {
-      const comboName = options.groups.map((g) => next[g.name]).join(" + ");
-      const variant = options.variants.find((v) => v.name === comboName);
-      if (variant && variant.price > 0) {
-        onPriceChange?.(variant.price);
-      } else {
-        onPriceChange?.(basePrice);
-      }
+      const comboName = options.groups.map((group) => selected[group.name]).join(" + ");
+      const variant = options.variants.find((entry) => entry.name === comboName);
+
+      onPriceChange?.(variant && variant.price > 0 ? variant.price : basePrice);
       onVariantChange?.(comboName);
-    } else if (!options.allVariants && options.prices) {
-      let total = basePrice;
-      for (const group of options.groups) {
-        const val = next[group.name];
-        if (!val) continue;
-        const add = options.prices[group.name]?.[val] ?? 0;
-        total += add;
-      }
-      onPriceChange?.(total);
-      const label = options.groups.map((g) => next[g.name]).join(" + ");
-      onVariantChange?.(label);
+      return;
     }
+
+    if (!options.allVariants && options.prices) {
+      const total = options.groups.reduce((sum, group) => {
+        const value = selected[group.name];
+        const add = value ? options.prices?.[group.name]?.[value] ?? 0 : 0;
+        return sum + add;
+      }, basePrice);
+
+      onPriceChange?.(total);
+      onVariantChange?.(options.groups.map((group) => selected[group.name]).join(" + "));
+    }
+  }, [basePrice, onPriceChange, onVariantChange, options, selected]);
+
+  function handleSelect(groupName: string, value: string) {
+    setSelected((current) => ({ ...current, [groupName]: value }));
   }
 
   return (

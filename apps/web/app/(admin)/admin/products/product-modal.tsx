@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useActionState, useRef, useState, useEffect } from "react";
+import { useFormStatus } from "react-dom";
 import { ImageGalleryManager } from "./image-gallery-manager";
 import { ProductOptionsEditor, type ProductOptionsData } from "./product-options-editor";
 
@@ -43,8 +44,18 @@ type ProductModalProps = {
   categories: CategoryNode[];
   allProducts: ProductOption[];
   onClose: () => void;
-  upsertAction: (formData: FormData) => void;
+  upsertAction: (state: { error: string | null }, formData: FormData) => Promise<{ error: string | null }>;
 };
+
+function ProductSubmitButton({ isEditing }: { isEditing: boolean }) {
+  const { pending } = useFormStatus();
+
+  return (
+    <button className="button button-primary" type="submit" disabled={pending}>
+      {pending ? "Сохраняем..." : isEditing ? "Сохранить" : "Создать"}
+    </button>
+  );
+}
 
 export function ProductModal({
   open,
@@ -55,12 +66,14 @@ export function ProductModal({
   upsertAction,
 }: ProductModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [formState, formAction] = useActionState(upsertAction, { error: null });
   const [selectedCategorySlug, setSelectedCategorySlug] = useState(
     product?.categorySlug ?? categories[0]?.slug ?? "",
   );
   const [recommendedIds, setRecommendedIds] = useState<string[]>(
     product?.recommendedIds ?? [],
   );
+  const [imageUrls, setImageUrls] = useState<string[]>(product?.imageUrls ?? []);
   const [recSearch, setRecSearch] = useState("");
   const [specs, setSpecs] = useState<Array<{ key: string; value: string }>>(
     product?.specs
@@ -68,6 +81,7 @@ export function ProductModal({
       : [],
   );
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const [productOptions, setProductOptions] = useState<ProductOptionsData>(
     product?.options ?? null,
   );
@@ -85,6 +99,7 @@ export function ProductModal({
   useEffect(() => {
     setSelectedCategorySlug(product?.categorySlug ?? categories[0]?.slug ?? "");
     setRecommendedIds(product?.recommendedIds ?? []);
+    setImageUrls(product?.imageUrls ?? []);
     setRecSearch("");
     setSpecs(
       product?.specs
@@ -92,6 +107,7 @@ export function ProductModal({
         : [],
     );
     setAiLoading(false);
+    setAiError(null);
     setProductOptions(product?.options ?? null);
   }, [product, categories]);
 
@@ -146,6 +162,7 @@ export function ProductModal({
 
     if (!productName) return;
 
+    setAiError(null);
     setAiLoading(true);
     try {
       const categoryLabel = flatOptions.find((o) => o.slug === selectedCategorySlug)?.label ?? "";
@@ -156,7 +173,7 @@ export function ProductModal({
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert(`Ошибка ИИ: ${err.error ?? res.statusText}`);
+        setAiError(err.error ?? res.statusText);
         return;
       }
       const data = await res.json();
@@ -171,8 +188,8 @@ export function ProductModal({
           return [...prev, ...newSpecs];
         });
       }
-    } catch (err) {
-      alert("Не удалось получить характеристики от ИИ");
+    } catch {
+      setAiError("Не удалось получить характеристики от ИИ.");
     } finally {
       setAiLoading(false);
     }
@@ -221,10 +238,10 @@ export function ProductModal({
           <button type="button" className="admin-modal-close" onClick={handleClose}>✕</button>
         </div>
 
-        <form key={product?.id ?? "new"} action={upsertAction} className="admin-modal-body">
+        <form key={product?.id ?? "new"} action={formAction} className="admin-modal-body">
           <input type="hidden" name="productId" value={product?.id ?? ""} />
           <input type="hidden" name="originalSku" value={product?.sku ?? ""} />
-          <input type="hidden" name="imageUrls" value={product?.imageUrls?.join("\n") ?? ""} />
+          <input type="hidden" name="imageUrls" value={imageUrls.join("\n")} />
           <input type="hidden" name="seoTitle" value={product?.seoTitle ?? ""} />
           <input type="hidden" name="seoDescription" value={product?.seoDescription ?? ""} />
           <input type="hidden" name="recommendedIds" value={recommendedIds.join(",")} />
@@ -283,6 +300,12 @@ export function ProductModal({
             <textarea name="description" rows={3} placeholder="Описание товара" defaultValue={product?.description ?? ""} />
           </label>
 
+          {formState.error ? (
+            <p className="auth-error" style={{ margin: 0 }}>
+              {formState.error}
+            </p>
+          ) : null}
+
           {/* Specs editor */}
           <div className="admin-modal-field">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -333,6 +356,11 @@ export function ProductModal({
                 Нет характеристик. Добавьте вручную или нажмите «Заполнить ИИ».
               </p>
             )}
+            {aiError ? (
+              <p style={{ margin: "8px 0 0", fontSize: 13, color: "#9f3535" }}>
+                {aiError}
+              </p>
+            ) : null}
           </div>
 
           {/* Options editor */}
@@ -343,11 +371,12 @@ export function ProductModal({
             <input name="imageFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple />
           </label>
 
-          {product && product.imageUrls.length > 0 && (
+          {product && imageUrls.length > 0 && (
             <ImageGalleryManager
               sku={product.sku}
-              imageUrls={product.imageUrls}
+              imageUrls={imageUrls}
               productName={product.name}
+              onChange={setImageUrls}
             />
           )}
 
@@ -401,9 +430,7 @@ export function ProductModal({
           </div>
 
           <div className="admin-modal-actions">
-            <button className="button button-primary" type="submit">
-              {product ? "Сохранить" : "Создать"}
-            </button>
+            <ProductSubmitButton isEditing={Boolean(product)} />
             <button className="button button-secondary" type="button" onClick={handleClose}>
               Отмена
             </button>

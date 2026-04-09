@@ -8,6 +8,7 @@
     "dev:web": "corepack pnpm --filter @prostor/web dev",
     "dev:bot": "corepack pnpm --filter @prostor/bot dev",
     "build": "corepack pnpm -r --if-present build",
+    "deploy:pack": "node ./scripts/build-deploy-archive.mjs",
     "db:generate": "corepack pnpm --filter @prostor/db prisma:generate",
     "db:push": "corepack pnpm --filter @prostor/db exec prisma db push",
     "lint": "corepack pnpm -r --if-present lint",

@@ -1,20 +1,29 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { reorderProductImagesAction, deleteProductImageAction } from "./actions";
 
 type ImageGalleryManagerProps = {
   sku: string;
   imageUrls: string[];
   productName: string;
+  onChange?: (imageUrls: string[]) => void;
 };
 
-export function ImageGalleryManager({ sku, imageUrls, productName }: ImageGalleryManagerProps) {
+export function ImageGalleryManager({ sku, imageUrls, productName, onChange }: ImageGalleryManagerProps) {
   const [images, setImages] = useState(imageUrls);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
-  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    setImages(imageUrls);
+  }, [imageUrls]);
+
+  function applyImages(next: string[]) {
+    setImages(next);
+    onChange?.(next);
+  }
 
   if (images.length === 0) {
     return <p className="muted">Нет изображений. Загрузите фото через форму выше.</p>;
@@ -43,7 +52,7 @@ export function ImageGalleryManager({ sku, imageUrls, productName }: ImageGaller
     const next = [...images];
     const moved = next.splice(dragIndex, 1)[0]!;
     next.splice(index, 0, moved);
-    setImages(next);
+  applyImages(next);
     setDragIndex(null);
     setOverIndex(null);
 
@@ -64,7 +73,7 @@ export function ImageGalleryManager({ sku, imageUrls, productName }: ImageGaller
     if (index === 0) return;
     const next = [...images];
     [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
-    setImages(next);
+    applyImages(next);
     startTransition(async () => {
       const fd = new FormData();
       fd.set("sku", sku);
@@ -77,12 +86,35 @@ export function ImageGalleryManager({ sku, imageUrls, productName }: ImageGaller
     if (index === images.length - 1) return;
     const next = [...images];
     [next[index], next[index + 1]] = [next[index + 1]!, next[index]!];
-    setImages(next);
+    applyImages(next);
     startTransition(async () => {
       const fd = new FormData();
       fd.set("sku", sku);
       fd.set("imageUrls", JSON.stringify(next));
       await reorderProductImagesAction(fd);
+    });
+  }
+
+  function handleDelete(index: number) {
+    const imageUrl = images[index];
+
+    if (!imageUrl) {
+      return;
+    }
+
+    const next = images.filter((url) => url !== imageUrl);
+    applyImages(next);
+
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("sku", sku);
+      fd.set("imageUrl", imageUrl);
+
+      try {
+        await deleteProductImageAction(fd);
+      } catch {
+        applyImages(images);
+      }
     });
   }
 
@@ -123,18 +155,15 @@ export function ImageGalleryManager({ sku, imageUrls, productName }: ImageGaller
               >
                 →
               </button>
-              <form action={deleteProductImageAction} ref={formRef}>
-                <input type="hidden" name="sku" value={sku} />
-                <input type="hidden" name="imageUrl" value={url} />
-                <button
-                  type="submit"
-                  className="admin-gallery-btn admin-gallery-btn-delete"
-                  title="Удалить фото"
-                  disabled={isPending}
-                >
-                  ✕
-                </button>
-              </form>
+              <button
+                type="button"
+                className="admin-gallery-btn admin-gallery-btn-delete"
+                title="Удалить фото"
+                disabled={isPending}
+                onClick={() => handleDelete(index)}
+              >
+                ✕
+              </button>
             </div>
           </div>
         ))}

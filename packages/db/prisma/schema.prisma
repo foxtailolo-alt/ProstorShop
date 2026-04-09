@@ -15,7 +15,10 @@ model User {
   firstName        String?
   lastName         String?
   phone            String?
+  loyaltyPoints    Int              @default(0)
   roleAssignments  RoleAssignment[]
+  promoCodes       PromoCode[]      @relation("PromoCodeOwner")
+  pointTransactions PointTransaction[]
   activityLogs     ActivityLog[]
   carts            Cart[]
   orders           Order[]
@@ -156,13 +159,18 @@ model Order {
   id          String      @id @default(cuid())
   userId      String?
   user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  appliedPromoCodeId String?
+  appliedPromoCode PromoCode? @relation("AppliedPromoCode", fields: [appliedPromoCodeId], references: [id], onDelete: SetNull)
   status      String      @default("pending")
   total       Decimal     @db.Decimal(10, 2)
   customerName String
   phone       String
   note        String?
+  promoRewardDescription String?
+  cashbackPointsAwarded Int @default(0)
   attribution Json?
   items       OrderItem[]
+  pointTransactions PointTransaction[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 }
@@ -173,6 +181,7 @@ model OrderItem {
   productId String
   quantity  Int
   price     Decimal  @db.Decimal(10, 2)
+  variantLabel String?
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
 }
@@ -250,6 +259,42 @@ model TelegramPost {
   deepLink    String
   status      String   @default("draft")
   createdAt   DateTime @default(now())
+}
+
+model PromoCode {
+  id                   String             @id @default(cuid())
+  code                 String             @unique
+  type                 String             @default("custom")
+  ownerUserId          String?
+  ownerUser            User?              @relation("PromoCodeOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  rewardDescription    String?
+  ownerCashbackPercent Decimal?           @db.Decimal(5, 2)
+  isActive             Boolean            @default(true)
+  usageLimit           Int?
+  usageCount           Int                @default(0)
+  orders               Order[]            @relation("AppliedPromoCode")
+  pointTransactions    PointTransaction[]
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@index([ownerUserId])
+}
+
+model PointTransaction {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId     String?
+  order       Order?     @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  promoCodeId String?
+  promoCode   PromoCode? @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+  amount      Int
+  kind        String
+  description String
+  createdAt   DateTime   @default(now())
+
+  @@index([userId, createdAt])
+  @@index([orderId])
 }
 
 model Banner {

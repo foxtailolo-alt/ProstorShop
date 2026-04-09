@@ -2,6 +2,7 @@ import { createHash, createHmac } from "node:crypto";
 import { adminRoles } from "@prostor/core";
 import { prisma } from "@prostor/db";
 import { z } from "zod";
+import { ensureReferralPromoCodeForUser } from "../promo";
 import type { SessionRole, SessionUser, TelegramAuthInput } from "./types";
 
 function isSessionRole(value: string): value is SessionRole {
@@ -148,12 +149,19 @@ export async function syncTelegramUser(input: TelegramAuthInput): Promise<Sessio
     .filter((role): role is SessionRole => isSessionRole(role));
   const sessionRoles: SessionRole[] = roles.length > 0 ? roles : ["customer"];
 
+  await ensureReferralPromoCodeForUser({
+    userId: freshUser.id,
+    telegramId,
+    username: freshUser.telegramUsername,
+  });
+
   return {
     id: freshUser.id,
     telegramId,
     username: freshUser.telegramUsername,
     firstName: freshUser.firstName,
     lastName: freshUser.lastName,
+    phone: freshUser.phone,
     roles: sessionRoles,
   };
 }

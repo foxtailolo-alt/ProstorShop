@@ -22,7 +22,7 @@ corepack pnpm dev
 
 ## 2. Environment Variables
 
-Create `.env.local` (for local dev) or set env vars on VPS.
+Create `.env.local` only for local Next.js development. On VPS, keep deploy-time variables in `/home/deploy/ProstorShop/.env` and do not keep `apps/web/.env.local` on the server.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -75,7 +75,8 @@ corepack pnpm install
 corepack pnpm db:generate
 corepack pnpm db:push
 corepack pnpm seed          # first time only
-corepack pnpm build
+rm -f apps/web/.env.local
+corepack pnpm --filter @prostor/web build:prod
 ```
 
 ---
@@ -198,15 +199,30 @@ find /home/deploy/backups -name "prostor-*.sql.gz" -mtime +14 -delete
 
 ## 8. Deploy Workflow
 
+### Safe release archive from local machine
+
+```bash
+corepack pnpm deploy:pack
+```
+
+This archive intentionally excludes local env files, build artifacts, and transient folders. Upload `.env` separately to the server.
+
 ```bash
 cd /home/deploy/ProstorShop
 git pull origin main
 corepack pnpm install
 corepack pnpm db:generate
 corepack pnpm db:push          # safe for additive schema changes
-corepack pnpm build
+rm -f apps/web/.env.local
+corepack pnpm --filter @prostor/web build:prod
 sudo systemctl restart prostor-web prostor-bot
 ```
+
+### Important deploy rule
+
+- Never copy local `apps/web/.env.local` to the VPS.
+- If `apps/web/.env.local` appears on the server, delete it before every production build.
+- Production public URLs must live in the root `.env` file only.
 
 ---
 

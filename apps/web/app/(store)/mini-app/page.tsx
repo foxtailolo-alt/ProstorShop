@@ -10,6 +10,7 @@ type MiniAppPageProps = {
     added?: string;
     product?: string;
     source?: string;
+    tgWebAppStartParam?: string;
   }>;
 };
 
@@ -25,8 +26,9 @@ export default async function MiniAppPage({ searchParams }: MiniAppPageProps) {
 
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const addedProductSlug = resolvedSearchParams?.added?.trim();
-  const productSlug = resolvedSearchParams?.product?.trim();
-  const source = resolvedSearchParams?.source?.trim();
+  const directProductSlug = resolvedSearchParams?.tgWebAppStartParam?.trim();
+  const productSlug = resolvedSearchParams?.product?.trim() ?? directProductSlug;
+  const source = resolvedSearchParams?.source?.trim() ?? (directProductSlug ? "telegram-post" : undefined);
   const product = productSlug ? await findCatalogProductBySlug(productSlug) : null;
   const addedSameProduct = Boolean(product && addedProductSlug === product.slug);
   const attributionEntries = getAttributionEntries(attribution);

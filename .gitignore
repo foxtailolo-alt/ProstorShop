@@ -8,6 +8,9 @@ coverage
 !.env.example
 *.log
 *.tsbuildinfo
+prostor-deploy.tgz
+deploy-lightbox-admin-fixes.zip
+infra/ai-proxy/proxy.env
 apps/web/public/uploads/*
 !apps/web/public/uploads/.gitkeep
 

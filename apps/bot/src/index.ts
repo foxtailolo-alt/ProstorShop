@@ -11,6 +11,78 @@ if (!token) {
 const bot = new Telegraf(token);
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? "";
+const miniAppShortName = process.env.TELEGRAM_MINI_APP_SHORT_NAME;
+
+function normalizeTelegramMiniAppStartParam(value: string | null | undefined) {
+  const trimmedValue = value?.trim();
+
+  if (!trimmedValue) {
+    return undefined;
+  }
+
+  return trimmedValue.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
+}
+
+function buildTelegramMiniAppLaunchUrl(input: {
+  botUsername: string;
+  shortName?: string | null;
+  startParam?: string | null;
+}) {
+  const normalizedBotUsername = input.botUsername.replace(/^@/, "").trim();
+
+  if (!normalizedBotUsername) {
+    throw new Error("Telegram bot username is required to build Mini App launch URLs.");
+  }
+
+  const startParam = normalizeTelegramMiniAppStartParam(input.startParam);
+
+  if (input.shortName?.trim()) {
+    const shortName = input.shortName.trim();
+    const query = startParam ? `?startapp=${encodeURIComponent(startParam)}` : "";
+
+    return `https://t.me/${normalizedBotUsername}/${shortName}${query}`;
+  }
+
+  if (startParam) {
+    return `https://t.me/${normalizedBotUsername}?startapp=${encodeURIComponent(startParam)}`;
+  }
+
+  return `https://t.me/${normalizedBotUsername}?startapp`;
+}
+
+function buildMiniAppUrl(productSlug?: string) {
+  const webUrl = new URL(`${siteUrl}/mini-app`);
+
+  if (productSlug) {
+    webUrl.searchParams.set("product", productSlug);
+    webUrl.searchParams.set("source", "telegram-bot");
+  }
+
+  if (!botUsername.trim()) {
+    return webUrl.toString();
+  }
+
+  return buildTelegramMiniAppLaunchUrl({
+    botUsername,
+    shortName: miniAppShortName,
+    startParam: productSlug,
+  });
+}
+
+async function configureBotMenuButton() {
+  try {
+    await bot.telegram.setChatMenuButton({
+      menuButton: {
+        type: "web_app",
+        text: "Открыть магазин",
+        web_app: { url: `${siteUrl}/mini-app` },
+      },
+    });
+  } catch (error) {
+    console.warn("Failed to configure Telegram menu button.", error);
+  }
+}
 
 bot.start((context) => {
   context.reply("Простор: открой магазин или Mini App", {
@@ -86,7 +158,7 @@ bot.command("search", async (context) => {
 
   const lines = products.map(
     (p) =>
-      `• <a href="${siteUrl}/catalog/${p.category.slug}/${p.slug}">${p.name}</a> — ${Number(p.price).toLocaleString("ru-RU")} ₽`,
+      `• <a href="${buildMiniAppUrl(p.slug)}">${p.name}</a> — ${Number(p.price).toLocaleString("ru-RU")} ₽`,
   );
 
   return context.reply(
@@ -101,10 +173,12 @@ if (useWebhook) {
   const port = Number(process.env.BOT_WEBHOOK_PORT) || 3001;
   const path = `/bot${token}`;
   bot.launch({ webhook: { domain: useWebhook, port, hookPath: path } }).then(() => {
+    void configureBotMenuButton();
     console.log(`Telegram bot started in webhook mode on port ${port}.`);
   });
 } else {
   bot.launch().then(() => {
+    void configureBotMenuButton();
     console.log("Telegram bot started in polling mode.");
   });
 }

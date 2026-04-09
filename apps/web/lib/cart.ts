@@ -5,12 +5,15 @@ const CART_COOKIE_NAME = "prostor_cart";
 const CART_DURATION_MS = 1000 * 60 * 60 * 24 * 14;
 
 export type CartItem = {
+  itemKey: string;
   productSlug: string;
   quantity: number;
+  variantLabel?: string;
+  unitPrice: number;
 };
 
 type CartPayload = {
-  items: CartItem[];
+  items: Array<Partial<CartItem>>;
   expiresAt: number;
 };
 
@@ -77,14 +80,66 @@ function decodeCart(value?: string) {
     return null;
   }
 
-  const items = parsed.items.filter(
-    (item) => item.productSlug && Number.isInteger(item.quantity) && item.quantity > 0,
-  );
+  const items = parsed.items.filter(isCartItemRecord).map(normalizeCartItem).filter(isDefined);
 
   return {
     items,
     expiresAt: parsed.expiresAt,
   } satisfies CartPayload;
+}
+
+export function buildCartItemKey(productSlug: string, variantLabel?: string) {
+  const normalizedVariant = normalizeVariantLabel(variantLabel);
+
+  return normalizedVariant ? `${productSlug}::${normalizedVariant}` : productSlug;
+}
+
+function normalizeVariantLabel(value: unknown) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim();
+  return normalized ? normalized : undefined;
+}
+
+function normalizeUnitPrice(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+
+  return value;
+}
+
+function isDefined<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined;
+}
+
+function isCartItemRecord(value: unknown): value is Partial<CartItem> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeCartItem(item: Partial<CartItem>) {
+  const quantity = typeof item.quantity === "number" && Number.isInteger(item.quantity) ? item.quantity : null;
+
+  if (!item.productSlug || quantity === null || quantity <= 0) {
+    return null;
+  }
+
+  const variantLabel = normalizeVariantLabel(item.variantLabel);
+  const unitPrice = normalizeUnitPrice(item.unitPrice);
+
+  if (unitPrice === null) {
+    return null;
+  }
+
+  return {
+    itemKey: item.itemKey || buildCartItemKey(item.productSlug, variantLabel),
+    productSlug: item.productSlug,
+    quantity,
+    variantLabel,
+    unitPrice,
+  } satisfies CartItem;
 }
 
 async function writeCart(items: CartItem[]) {
@@ -120,35 +175,60 @@ export async function getCartItems() {
   return decodeCart(cookieStore.get(CART_COOKIE_NAME)?.value)?.items ?? [];
 }
 
-export async function addCartItem(productSlug: string, quantity = 1) {
+export async function addCartItem(input: {
+  productSlug: string;
+  quantity?: number;
+  variantLabel?: string;
+  unitPrice: number;
+}) {
   const items = await getCartItems();
-  const existingItem = items.find((item) => item.productSlug === productSlug);
+  const quantity = input.quantity ?? 1;
+
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    throw new Error("Cart quantity is invalid.");
+  }
+
+  if (!Number.isFinite(input.unitPrice) || input.unitPrice < 0) {
+    throw new Error("Cart unit price is invalid.");
+  }
+
+  const itemKey = buildCartItemKey(input.productSlug, input.variantLabel);
+  const existingItem = items.find((item) => item.itemKey === itemKey);
 
   const nextItems = existingItem
     ? items.map((item) =>
-        item.productSlug === productSlug
+        item.itemKey === itemKey
           ? { ...item, quantity: item.quantity + quantity }
           : item,
       )
-    : [...items, { productSlug, quantity }];
+    : [
+        ...items,
+        {
+          itemKey,
+          productSlug: input.productSlug,
+          quantity,
+          variantLabel: normalizeVariantLabel(input.variantLabel),
+          unitPrice: input.unitPrice,
+        },
+      ];
 
   await writeCart(nextItems);
 }
 
-export async function updateCartItem(productSlug: string, quantity: number) {
+export async function updateCartItem(itemKey: string, quantity: number) {
   const items = await getCartItems();
   const nextItems = quantity <= 0
-    ? items.filter((item) => item.productSlug !== productSlug)
+    ? items.filter((item) => item.itemKey !== itemKey)
     : items.map((item) =>
-        item.productSlug === productSlug ? { ...item, quantity } : item,
+        item.itemKey === itemKey ? { ...item, quantity } : item,
       );
 
   await writeCart(nextItems);
 }
 
-export async function removeCartItem(productSlug: string) {
+export async function removeCartItem(itemKey: string) {
   const items = await getCartItems();
-  await writeCart(items.filter((item) => item.productSlug !== productSlug));
+  await writeCart(items.filter((item) => item.itemKey !== itemKey));
 }
 
 export async function clearCart() {

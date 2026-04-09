@@ -28,169 +28,182 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-export async function upsertProductAction(formData: FormData) {
-  await requirePermission("products", "write");
-  const productId = String(formData.get("productId") ?? "").trim();
-  const originalSku = String(formData.get("originalSku") ?? "").trim();
-  const sku = String(formData.get("sku") ?? "").trim();
-  const name = String(formData.get("name") ?? "").trim();
-  const brand = String(formData.get("brand") ?? "").trim();
-  const categorySlug = String(formData.get("categorySlug") ?? "").trim();
-  const price = Number(formData.get("price") ?? 0);
-  const imageUrlsInput = String(formData.get("imageUrls") ?? "").trim();
-  const imageFiles = formData
-    .getAll("imageFiles")
-    .filter((value): value is File => value instanceof File && value.size > 0);
-  const seoTitle = String(formData.get("seoTitle") ?? "").trim();
-  const seoDescription = String(formData.get("seoDescription") ?? "").trim();
-  const description = String(formData.get("description") ?? "").trim();
-  const inStock = formData.get("inStock") === "on";
-  const specsRaw = String(formData.get("specs") ?? "").trim();
-  let specs: Record<string, string> | undefined = undefined;
-  if (specsRaw) {
-    try {
-      const parsed = JSON.parse(specsRaw);
-      if (typeof parsed === "object" && !Array.isArray(parsed) && Object.keys(parsed).length > 0) {
-        specs = parsed;
-      }
-    } catch { /* ignore invalid JSON */ }
-  }
+export async function upsertProductAction(
+  _: { error: string | null },
+  formData: FormData,
+): Promise<{ error: string | null }> {
+  let savedSku = "";
 
-  const optionsRaw = String(formData.get("options") ?? "").trim();
-  let optionsValue: string | undefined = undefined;
-  if (optionsRaw) {
-    try {
-      const parsed = JSON.parse(optionsRaw);
-      if (typeof parsed === "object" && !Array.isArray(parsed) && parsed?.groups?.length > 0) {
-        optionsValue = optionsRaw; // valid JSON string to pass through
-      }
-    } catch { /* ignore invalid JSON */ }
-  }
+  try {
+    await requirePermission("products", "write");
+    const productId = String(formData.get("productId") ?? "").trim();
+    const originalSku = String(formData.get("originalSku") ?? "").trim();
+    const sku = String(formData.get("sku") ?? "").trim();
+    const name = String(formData.get("name") ?? "").trim();
+    const brand = String(formData.get("brand") ?? "").trim();
+    const categorySlug = String(formData.get("categorySlug") ?? "").trim();
+    const price = Number(formData.get("price") ?? 0);
+    const imageUrlsInput = String(formData.get("imageUrls") ?? "").trim();
+    const imageFiles = formData
+      .getAll("imageFiles")
+      .filter((value): value is File => value instanceof File && value.size > 0);
+    const seoTitle = String(formData.get("seoTitle") ?? "").trim();
+    const seoDescription = String(formData.get("seoDescription") ?? "").trim();
+    const description = String(formData.get("description") ?? "").trim();
+    const inStock = formData.get("inStock") === "on";
+    const specsRaw = String(formData.get("specs") ?? "").trim();
+    let specs: Record<string, string> | undefined = undefined;
+    if (specsRaw) {
+      try {
+        const parsed = JSON.parse(specsRaw);
+        if (typeof parsed === "object" && !Array.isArray(parsed) && Object.keys(parsed).length > 0) {
+          specs = parsed;
+        }
+      } catch { /* ignore invalid JSON */ }
+    }
 
-  if (!sku || !name || !brand || !categorySlug || !Number.isFinite(price) || price <= 0) {
-    throw new Error("Product form is incomplete.");
-  }
+    const optionsRaw = String(formData.get("options") ?? "").trim();
+    let optionsValue: string | undefined = undefined;
+    if (optionsRaw) {
+      try {
+        const parsed = JSON.parse(optionsRaw);
+        if (typeof parsed === "object" && !Array.isArray(parsed) && parsed?.groups?.length > 0) {
+          optionsValue = optionsRaw;
+        }
+      } catch { /* ignore invalid JSON */ }
+    }
 
-  const category = await prisma.category.findUnique({ where: { slug: categorySlug } });
+    if (!sku || !name || !brand || !categorySlug || !Number.isFinite(price) || price <= 0) {
+      throw new Error("Product form is incomplete.");
+    }
 
-  if (!category) {
-    throw new Error("Category not found.");
-  }
+    const category = await prisma.category.findUnique({ where: { slug: categorySlug } });
 
-  const productSlug = slugify(name);
-  const existingProduct = productId
-    ? await prisma.product.findUnique({ where: { id: productId } })
-    : await prisma.product.findUnique({ where: { sku: originalSku || sku } });
+    if (!category) {
+      throw new Error("Category not found.");
+    }
 
-  if (!existingProduct && (productId || originalSku)) {
-    throw new Error("Product not found.");
-  }
+    const productSlug = slugify(name);
+    const existingProduct = productId
+      ? await prisma.product.findUnique({ where: { id: productId } })
+      : await prisma.product.findUnique({ where: { sku: originalSku || sku } });
 
-  const duplicateSkuProduct = await prisma.product.findUnique({ where: { sku } });
+    if (!existingProduct && (productId || originalSku)) {
+      throw new Error("Product not found.");
+    }
 
-  if (duplicateSkuProduct && duplicateSkuProduct.id !== existingProduct?.id) {
-    throw new Error("SKU already exists.");
-  }
+    const duplicateSkuProduct = await prisma.product.findUnique({ where: { sku } });
 
-  const manualImageUrls = parseImageUrlList(imageUrlsInput);
-  const uploadedImageUrls = await saveProductImages(imageFiles, productSlug);
-  const existingImageUrls = existingProduct
-    ? uniqueImageUrls([
-        ...(existingProduct.imageUrls ?? []),
-        ...(existingProduct.imageUrl ? [existingProduct.imageUrl] : []),
-      ])
-    : [];
-  const finalImageUrlsSource =
-    manualImageUrls.length > 0 || uploadedImageUrls.length > 0
-      ? [...manualImageUrls, ...uploadedImageUrls]
-      : existingImageUrls;
-  const finalImageUrls = uniqueImageUrls(finalImageUrlsSource).slice(0, maxProductImageCount);
+    if (duplicateSkuProduct && duplicateSkuProduct.id !== existingProduct?.id) {
+      throw new Error("SKU already exists.");
+    }
 
-  if (manualImageUrls.length + uploadedImageUrls.length > maxProductImageCount) {
-    throw new Error("У товара может быть не более 10 изображений.");
-  }
+    const manualImageUrls = parseImageUrlList(imageUrlsInput);
+    const uploadedImageUrls = await saveProductImages(imageFiles, productSlug);
+    const existingImageUrls = existingProduct
+      ? uniqueImageUrls([
+          ...(existingProduct.imageUrls ?? []),
+          ...(existingProduct.imageUrl ? [existingProduct.imageUrl] : []),
+        ])
+      : [];
+    const finalImageUrlsSource =
+      manualImageUrls.length > 0 || uploadedImageUrls.length > 0
+        ? [...manualImageUrls, ...uploadedImageUrls]
+        : existingImageUrls;
+    const finalImageUrls = uniqueImageUrls(finalImageUrlsSource).slice(0, maxProductImageCount);
 
-  const finalImageUrl = finalImageUrls[0] ?? null;
+    if (manualImageUrls.length + uploadedImageUrls.length > maxProductImageCount) {
+      throw new Error("У товара может быть не более 10 изображений.");
+    }
 
-  const savedProduct = existingProduct
-    ? await prisma.product.update({
-        where: { id: existingProduct.id },
-        data: {
-          sku,
-          name,
-          brand,
-          slug: productSlug,
-          price,
-          imageUrl: finalImageUrl,
-          imageUrls: finalImageUrls,
-          seoTitle: seoTitle || null,
-          seoDescription: seoDescription || null,
-          description,
-          specs,
-          options: optionsValue ? JSON.parse(optionsValue) : undefined,
-          inStock,
-          categoryId: category.id,
-        },
-      })
-    : await prisma.product.create({
-        data: {
-          sku,
-          name,
-          brand,
-          slug: productSlug,
-          price,
-          imageUrl: finalImageUrl,
-          imageUrls: finalImageUrls,
-          seoTitle: seoTitle || null,
-          seoDescription: seoDescription || null,
-          description,
-          specs,
-          options: optionsValue ? JSON.parse(optionsValue) : undefined,
-          inStock,
-          categoryId: category.id,
-        },
-      });
+    const finalImageUrl = finalImageUrls[0] ?? null;
 
-  // Sync recommended products
-  const recommendedIdsRaw = String(formData.get("recommendedIds") ?? "").trim();
-  const recommendedIds = recommendedIdsRaw
-    ? recommendedIdsRaw.split(",").filter(Boolean)
-    : [];
+    const savedProduct = existingProduct
+      ? await prisma.product.update({
+          where: { id: existingProduct.id },
+          data: {
+            sku,
+            name,
+            brand,
+            slug: productSlug,
+            price,
+            imageUrl: finalImageUrl,
+            imageUrls: finalImageUrls,
+            seoTitle: seoTitle || null,
+            seoDescription: seoDescription || null,
+            description,
+            specs,
+            options: optionsValue ? JSON.parse(optionsValue) : undefined,
+            inStock,
+            categoryId: category.id,
+          },
+        })
+      : await prisma.product.create({
+          data: {
+            sku,
+            name,
+            brand,
+            slug: productSlug,
+            price,
+            imageUrl: finalImageUrl,
+            imageUrls: finalImageUrls,
+            seoTitle: seoTitle || null,
+            seoDescription: seoDescription || null,
+            description,
+            specs,
+            options: optionsValue ? JSON.parse(optionsValue) : undefined,
+            inStock,
+            categoryId: category.id,
+          },
+        });
 
-  await prisma.productRecommendation.deleteMany({
-    where: { sourceProductId: savedProduct.id },
-  });
+    const recommendedIdsRaw = String(formData.get("recommendedIds") ?? "").trim();
+    const recommendedIds = recommendedIdsRaw
+      ? recommendedIdsRaw.split(",").filter(Boolean)
+      : [];
 
-  if (recommendedIds.length > 0) {
-    await prisma.productRecommendation.createMany({
-      data: recommendedIds.map((recId, index) => ({
-        sourceProductId: savedProduct.id,
-        recommendedProductId: recId,
-        position: index,
-      })),
-      skipDuplicates: true,
+    await prisma.productRecommendation.deleteMany({
+      where: { sourceProductId: savedProduct.id },
     });
+
+    if (recommendedIds.length > 0) {
+      await prisma.productRecommendation.createMany({
+        data: recommendedIds.map((recId, index) => ({
+          sourceProductId: savedProduct.id,
+          recommendedProductId: recId,
+          position: index,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    await logAdminActivity({
+      entityType: "product",
+      entityId: savedProduct.id,
+      action: existingProduct ? "product.updated" : "product.created",
+      summary: `${name} (${sku}) сохранен в категории ${category.name}.`,
+      metadata: {
+        sku,
+        categorySlug,
+        inStock,
+        price,
+        imageCount: finalImageUrls.length,
+      },
+    });
+
+    savedSku = savedProduct.sku;
+
+    revalidatePath("/admin/products");
+    revalidatePath("/admin");
+    revalidatePath("/admin/activity");
+    revalidatePath("/catalog");
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Не удалось сохранить товар.",
+    };
   }
 
-  await logAdminActivity({
-    entityType: "product",
-    entityId: savedProduct.id,
-    action: existingProduct ? "product.updated" : "product.created",
-    summary: `${name} (${sku}) сохранен в категории ${category.name}.`,
-    metadata: {
-      sku,
-      categorySlug,
-      inStock,
-      price,
-      imageCount: finalImageUrls.length,
-    },
-  });
-
-  revalidatePath("/admin/products");
-  revalidatePath("/admin");
-  revalidatePath("/admin/activity");
-  revalidatePath("/catalog");
-  redirect("/admin/products");
+  redirect(`/admin/products?saved=${encodeURIComponent(savedSku)}`);
 }
 
 export async function deleteProductAction(formData: FormData) {
@@ -349,6 +362,7 @@ export async function reorderProductImagesAction(formData: FormData) {
 
   revalidatePath("/admin/products");
   revalidatePath("/catalog");
+  revalidatePath(`/catalog/${product.slug}`);
 }
 
 export async function deleteProductImageAction(formData: FormData) {
@@ -379,5 +393,5 @@ export async function deleteProductImageAction(formData: FormData) {
 
   revalidatePath("/admin/products");
   revalidatePath("/catalog");
-  redirect(`/admin/products?edit=${encodeURIComponent(sku)}`);
+  revalidatePath(`/catalog/${product.slug}`);
 }

@@ -45,7 +45,10 @@ type Props = {
   allProductOptions: ProductOption[];
   editSku: string | null;
   saveMessage: string | null;
-  upsertAction: (state: { error: string | null }, formData: FormData) => Promise<{ error: string | null }>;
+  upsertAction: (
+    state: { error: string | null; savedSku: string | null; successMessage: string | null; savedAt: number | null },
+    formData: FormData,
+  ) => Promise<{ error: string | null; savedSku: string | null; successMessage: string | null; savedAt: number | null }>;
   toggleStockAction: (formData: FormData) => void;
   deleteAction: (formData: FormData) => void;
 };
@@ -66,6 +69,12 @@ export function ProductsGrid({
 
   const [modalOpen, setModalOpen] = useState(!!editSku);
   const [editingProduct, setEditingProduct] = useState<ProductRecord | null>(initialProduct);
+  const [notice, setNotice] = useState(saveMessage);
+  const [pendingSavedSku, setPendingSavedSku] = useState<string | null>(null);
+
+  useEffect(() => {
+    setNotice(saveMessage);
+  }, [saveMessage]);
 
   useEffect(() => {
     if (!editSku) {
@@ -95,6 +104,22 @@ export function ProductsGrid({
     }
   }, [editingProduct, products]);
 
+  useEffect(() => {
+    if (!pendingSavedSku) {
+      return;
+    }
+
+    const nextProduct = products.find((product) => product.sku === pendingSavedSku) ?? null;
+
+    if (!nextProduct) {
+      return;
+    }
+
+    setEditingProduct(nextProduct);
+    setModalOpen(true);
+    setPendingSavedSku(null);
+  }, [pendingSavedSku, products]);
+
   function openNew() {
     setEditingProduct(null);
     setModalOpen(true);
@@ -108,6 +133,12 @@ export function ProductsGrid({
   function closeModal() {
     setModalOpen(false);
     setEditingProduct(null);
+  }
+
+  function handleSaved(savedSku: string, successMessage: string) {
+    setNotice(successMessage);
+    setPendingSavedSku(savedSku);
+    setModalOpen(true);
   }
 
   const modalData = editingProduct
@@ -141,11 +172,11 @@ export function ProductsGrid({
         </div>
       </section>
 
-      {saveMessage ? (
+      {notice ? (
         <section style={{ marginTop: 16 }}>
           <div className="added-notice glass">
-            <span>{saveMessage}</span>
-            <Link href="/admin/products" className="button button-secondary button-sm">
+            <span>{notice}</span>
+            <Link href="/admin/products" className="button button-secondary button-sm" onClick={() => setNotice(null)}>
               Скрыть
             </Link>
           </div>
@@ -222,6 +253,7 @@ export function ProductsGrid({
         categories={categories}
         allProducts={allProductOptions}
         onClose={closeModal}
+        onSaved={handleSaved}
         upsertAction={upsertAction}
       />
     </>

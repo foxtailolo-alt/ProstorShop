@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "../../../../lib/auth/session";
 
+type OpenAiErrorPayload = {
+  error?: {
+    code?: string;
+    message?: string;
+    type?: string;
+  };
+};
+
 function getOpenAiProxyUrl() {
   return process.env.OPENAI_PROXY_URL?.trim() ?? "";
 }
@@ -33,6 +41,39 @@ function getOpenAiHeaders(apiKey?: string) {
 
   headers.Authorization = `Bearer ${apiKey}`;
   return headers;
+}
+
+function parseOpenAiError(errorText: string): OpenAiErrorPayload | null {
+  try {
+    return JSON.parse(errorText) as OpenAiErrorPayload;
+  } catch {
+    return null;
+  }
+}
+
+function formatOpenAiError(status: number, errorText: string) {
+  const parsed = parseOpenAiError(errorText);
+  const errorCode = parsed?.error?.code?.trim();
+  const errorMessage = parsed?.error?.message?.trim();
+
+  if (errorCode === "unsupported_country_region_territory") {
+    return {
+      error: "AI provider blocked this server region. Move the AI proxy to a supported region or use another OpenAI-compatible upstream.",
+      details: errorMessage || errorText,
+    };
+  }
+
+  if (errorMessage) {
+    return {
+      error: `OpenAI API error: ${status}. ${errorMessage}`,
+      details: errorText,
+    };
+  }
+
+  return {
+    error: `OpenAI API error: ${status}`,
+    details: errorText,
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -82,7 +123,7 @@ export async function POST(request: NextRequest) {
 
   if (!response.ok) {
     const errorText = await response.text();
-    return NextResponse.json({ error: `OpenAI API error: ${response.status}`, details: errorText }, { status: 502 });
+    return NextResponse.json(formatOpenAiError(response.status, errorText), { status: 502 });
   }
 
   const data = await response.json();

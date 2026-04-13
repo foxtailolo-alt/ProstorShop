@@ -2,6 +2,7 @@
 
 import { useActionState, useRef, useState, useEffect } from "react";
 import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
 import { ImageGalleryManager } from "./image-gallery-manager";
 import { ProductOptionsEditor, type ProductOptionsData } from "./product-options-editor";
 
@@ -44,7 +45,17 @@ type ProductModalProps = {
   categories: CategoryNode[];
   allProducts: ProductOption[];
   onClose: () => void;
-  upsertAction: (state: { error: string | null }, formData: FormData) => Promise<{ error: string | null }>;
+  onSaved: (savedSku: string, successMessage: string) => void;
+  upsertAction: (
+    state: { error: string | null; savedSku: string | null; successMessage: string | null; savedAt: number | null },
+    formData: FormData,
+  ) => Promise<{ error: string | null; savedSku: string | null; successMessage: string | null; savedAt: number | null }>;
+};
+
+type PendingUpload = {
+  id: string;
+  file: File;
+  previewUrl: string;
 };
 
 function ProductSubmitButton({ isEditing }: { isEditing: boolean }) {
@@ -63,10 +74,20 @@ export function ProductModal({
   categories,
   allProducts,
   onClose,
+  onSaved,
   upsertAction,
 }: ProductModalProps) {
+  const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [formState, formAction] = useActionState(upsertAction, { error: null });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastHandledSaveRef = useRef<number | null>(null);
+  const pendingUploadsRef = useRef<PendingUpload[]>([]);
+  const [formState, formAction] = useActionState(upsertAction, {
+    error: null,
+    savedSku: null,
+    successMessage: null,
+    savedAt: null,
+  });
   const [selectedCategorySlug, setSelectedCategorySlug] = useState(
     product?.categorySlug ?? categories[0]?.slug ?? "",
   );
@@ -82,9 +103,11 @@ export function ProductModal({
   );
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [productOptions, setProductOptions] = useState<ProductOptionsData>(
     product?.options ?? null,
   );
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -95,6 +118,16 @@ export function ProductModal({
       dialog.close();
     }
   }, [open]);
+
+  useEffect(() => {
+    pendingUploadsRef.current = pendingUploads;
+  }, [pendingUploads]);
+
+  useEffect(() => {
+    return () => {
+      pendingUploadsRef.current.forEach((upload) => URL.revokeObjectURL(upload.previewUrl));
+    };
+  }, []);
 
   useEffect(() => {
     setSelectedCategorySlug(product?.categorySlug ?? categories[0]?.slug ?? "");
@@ -108,8 +141,30 @@ export function ProductModal({
     );
     setAiLoading(false);
     setAiError(null);
+    setImageError(null);
     setProductOptions(product?.options ?? null);
+    setPendingUploads((current) => {
+      current.forEach((upload) => URL.revokeObjectURL(upload.previewUrl));
+      return [];
+    });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   }, [product, categories]);
+
+  useEffect(() => {
+    if (!formState.savedSku || !formState.successMessage || !formState.savedAt) {
+      return;
+    }
+
+    if (lastHandledSaveRef.current === formState.savedAt) {
+      return;
+    }
+
+    lastHandledSaveRef.current = formState.savedAt;
+    onSaved(formState.savedSku, formState.successMessage);
+    router.refresh();
+  }, [formState.savedAt, formState.savedSku, formState.successMessage, onSaved, router]);
 
   // Build flat options with indentation for tree categories
   const flatOptions: { slug: string; label: string }[] = [];
@@ -152,6 +207,65 @@ export function ProductModal({
     setSpecs((prev) => [...prev, { key: "", value: "" }]);
   }
 
+  function syncFileInput(files: File[]) {
+    const input = fileInputRef.current;
+
+    if (!input) {
+      return;
+    }
+
+    const transfer = new DataTransfer();
+    files.forEach((file) => transfer.items.add(file));
+    input.files = transfer.files;
+  }
+
+  function replacePendingUploads(next: PendingUpload[]) {
+    setPendingUploads((current) => {
+      const nextUrls = new Set(next.map((upload) => upload.previewUrl));
+      current.forEach((upload) => {
+        if (!nextUrls.has(upload.previewUrl)) {
+          URL.revokeObjectURL(upload.previewUrl);
+        }
+      });
+      return next;
+    });
+    syncFileInput(next.map((upload) => upload.file));
+  }
+
+  function handleImageSelection(event: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFiles = Array.from(event.target.files ?? []);
+
+    if (selectedFiles.length === 0) {
+      syncFileInput(pendingUploads.map((upload) => upload.file));
+      return;
+    }
+
+    const availableSlots = Math.max(0, 10 - imageUrls.length - pendingUploads.length);
+    const acceptedFiles = selectedFiles.slice(0, availableSlots);
+
+    setImageError(acceptedFiles.length < selectedFiles.length ? "У товара может быть не более 10 изображений." : null);
+
+    const nextUploads = acceptedFiles.map((file) => ({
+      id: `${file.name}-${file.lastModified}-${crypto.randomUUID()}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }));
+
+    replacePendingUploads([...pendingUploads, ...nextUploads]);
+  }
+
+  function handlePendingUploadsChange(nextUrls: string[]) {
+    const next = nextUrls
+      .map((url) => pendingUploads.find((upload) => upload.previewUrl === url))
+      .filter((upload): upload is PendingUpload => Boolean(upload));
+    replacePendingUploads(next);
+  }
+
+  function handlePendingUploadDelete(index: number) {
+    replacePendingUploads(pendingUploads.filter((_, currentIndex) => currentIndex !== index));
+    setImageError(null);
+  }
+
   async function fillWithAI() {
     const form = dialogRef.current?.querySelector("form");
     if (!form) return;
@@ -173,7 +287,7 @@ export function ProductModal({
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        setAiError(err.error ?? res.statusText);
+        setAiError(err.error ?? err.details ?? res.statusText);
         return;
       }
       const data = await res.json();
@@ -306,6 +420,12 @@ export function ProductModal({
             </p>
           ) : null}
 
+          {formState.successMessage ? (
+            <p style={{ margin: 0, color: "#1d7a46", fontSize: 14 }}>
+              {formState.successMessage}
+            </p>
+          ) : null}
+
           {/* Specs editor */}
           <div className="admin-modal-field">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -368,8 +488,35 @@ export function ProductModal({
 
           <label className="admin-modal-field">
             <span>Добавить фото (JPG/PNG/WebP, до 10)</span>
-            <input name="imageFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple />
+            <input
+              ref={fileInputRef}
+              name="imageFiles"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              onChange={handleImageSelection}
+            />
           </label>
+
+          {imageError ? (
+            <p style={{ margin: "-6px 0 0", fontSize: 13, color: "#9f3535" }}>
+              {imageError}
+            </p>
+          ) : null}
+
+          {pendingUploads.length > 0 ? (
+            <div className="admin-modal-field">
+              <span style={{ display: "block", marginBottom: 8 }}>Новые фото до сохранения</span>
+              <ImageGalleryManager
+                sku={product?.sku ?? "pending-uploads"}
+                imageUrls={pendingUploads.map((upload) => upload.previewUrl)}
+                productName={product?.name ?? "Новое фото"}
+                onChange={handlePendingUploadsChange}
+                onDeleteImage={handlePendingUploadDelete}
+                persistChanges={false}
+              />
+            </div>
+          ) : null}
 
           {product && imageUrls.length > 0 && (
             <ImageGalleryManager

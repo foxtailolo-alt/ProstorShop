@@ -120,9 +120,10 @@ infra/
 - Admin order workflow with cashback accrual on completion, referral reward accrual, promo visibility, and profile revalidation.
 - Role-aware admin area with operational dashboard instead of a presentation-style mock.
 - Admin product management with modal dialog: create/edit, category tree select, recommendation picker, auto-generated SKU.
-- Admin product UX hardening: inline save errors, success feedback, image manager sync, and catalog revalidation after image changes.
+- Admin product UX hardening: inline save errors, save-in-place success feedback, local preview/reorder for newly selected images, image manager sync, and catalog revalidation after image changes.
 - Product specs editor with AI auto-fill via OpenAI Responses API (`web_search_preview` tool for factual data from the internet).
 - AI specs endpoint supports direct OpenAI or internal proxy mode via `OPENAI_PROXY_URL` and `OPENAI_PROXY_SECRET`.
+- Production AI proxy is routed through a separate supported-region host; operator-facing AI errors now explain region blocks clearly.
 - Product options system: configurable option groups (e.g. "Storage", "SIM type") with per-variant or additive pricing and storefront option picker with dynamic price updates.
 - Product media: gallery model with up to 10 images, admin image gallery manager with reorder/delete, storefront lightbox gallery.
 - Product card media: cursor-position-based image switching on hover (left→right = first→last photo).
@@ -137,11 +138,11 @@ infra/
 - Basic SEO foundation: metadata, sitemap, robots, canonical URLs.
 - Production deployment to VPS is live on `https://88-218-64-61.sslip.io`, and Telegram login was fixed to use the real HTTPS domain instead of localhost.
 - Safe production packaging and env guards exist: `corepack pnpm deploy:pack` and `corepack pnpm --filter @prostor/web build:prod`.
+- Production media storage is externalized via `UPLOADS_DIR=/home/deploy/prostor-uploads`, and release archives no longer overwrite the uploads directory.
 - Vitest coverage expanded for banners, cart variants, AI specs route, and cart-selection helpers.
 
 ### Remaining Work
 
-- Deploy the latest repo changes to the VPS so server-side `build:prod` and the new safety scripts exist on the host, not only locally.
 - Run a full post-deploy smoke check for the live stack: `/login`, `/profile`, cart promo flow, referral promo flow, Telegram post deep links, and Mini App launch from bot.
 - Apply and document the Prisma migration path for production instead of relying only on `db push` as the schema continues to grow.
 - Finish production setup for Telegram posting and verify the target channel/group permissions with the current bot token.
@@ -165,19 +166,20 @@ infra/
 - `scripts/assert-public-env.mjs` blocks unsafe production builds, and `scripts/build-deploy-archive.mjs` creates the safe release tarball.
 - The live site already serves the correct login domain `https://88-218-64-61.sslip.io`.
 - The VPS cleanup was done: `/home/deploy/ProstorShop/apps/web/.env.local` was removed.
-- The new safety scripts are still local-only until the latest repo revision is deployed to the server.
+- The latest repo revision is deployed to the VPS, including `build:prod` guard scripts and the admin product UX fixes.
 - Local admin login exists only for localhost development and must not be exposed in production flows.
-- Uploaded product images are stored under `apps/web/public/uploads/products`.
+- Uploaded media must use `UPLOADS_DIR` on production; current VPS value is `/home/deploy/prostor-uploads` and nginx serves `/uploads/*` from the same location.
 - AI specs endpoint uses Responses API (`/v1/responses`) with `web_search_preview` tool for factual data.
-- `infra/ai-proxy/server.py` exists locally, but its real `proxy.env` must stay outside git.
+- `infra/ai-proxy/server.py` supports configurable upstream URLs; its real `proxy.env` must stay outside git.
+- Root SSH access on the main VPS now accepts the local key `~/.ssh/prostor_tradein_bot_ed25519_nopass`, so future deploys no longer require a password prompt.
 
 ### Next Recommended Steps
 
-1. Ship the current commit to the VPS, rebuild with `corepack pnpm --filter @prostor/web build:prod`, and verify both `prostor-web` and `prostor-bot` restart cleanly.
-2. Run production smoke tests for login, profile, cart with variants, promo application, cashback accrual, and Telegram Mini App entry.
-3. Replace the real proxy env file with a committed example file and document service management for `infra/ai-proxy`.
-4. Add one more test pass for promo/referral flows and admin order completion to reduce regression risk around loyalty logic.
-5. Convert the evolving schema changes into proper Prisma migrations before the next structural database update.
+1. Run a full manual production smoke test for login, profile, cart with variants, promo application, cashback accrual, Telegram Mini App entry, and the updated admin product image flow.
+2. Replace the real proxy env file with a committed example file and document service management for `infra/ai-proxy`.
+3. Add one more test pass for promo/referral flows, admin order completion, and the admin product image UX.
+4. Convert the evolving schema changes into proper Prisma migrations before the next structural database update.
+5. Verify Telegram posting end-to-end with the current bot token and target channel permissions.
 
 ## Build Order
 
@@ -209,10 +211,12 @@ infra/
 - Backups handled at PostgreSQL and uploaded media level.
 - Build production releases with `corepack pnpm deploy:pack` so local `.env` files and `.next` output are not shipped.
 - On the VPS, keep production public URLs only in `/home/deploy/ProstorShop/.env` and remove `apps/web/.env.local` before `build:prod`.
+- On production, set `UPLOADS_DIR=/home/deploy/prostor-uploads` so uploaded media lives outside the release directory and survives deploys.
 
 ## Media Handling
 
 - Product images can be stored locally in `apps/web/public/uploads`.
+- On the VPS, nginx should serve `/uploads/*` from the same directory specified by `UPLOADS_DIR`.
 - Admin product form supports direct JPG, PNG, and WebP upload.
 - Uploaded media should be included in VPS backup policy.
 

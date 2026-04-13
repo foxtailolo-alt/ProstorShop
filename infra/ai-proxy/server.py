@@ -9,6 +9,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
 PROXY_SECRET = os.environ.get("OPENAI_PROXY_SECRET", "").strip()
 LISTEN_HOST = os.environ.get("AI_PROXY_HOST", "0.0.0.0")
 LISTEN_PORT = int(os.environ.get("AI_PROXY_PORT", "3100"))
+RESPONSES_URL = os.environ.get("OPENAI_RESPONSES_URL", "").strip() or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com").rstrip("/") + "/v1/responses"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -41,7 +42,7 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(content_length)
 
         req = Request(
-            "https://api.openai.com/v1/responses",
+            RESPONSES_URL,
             data=body,
             headers={
                 "Content-Type": "application/json",

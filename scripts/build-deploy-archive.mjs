@@ -15,6 +15,7 @@ const excludes = [
   outputFile,
   ".env",
   "apps/web/.env.local",
+  "apps/web/public/uploads",
   "infra/ai-proxy/proxy.env",
   "deploy-lightbox-admin-fixes.zip",
 ];

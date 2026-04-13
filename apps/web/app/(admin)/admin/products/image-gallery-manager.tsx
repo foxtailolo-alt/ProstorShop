@@ -8,9 +8,18 @@ type ImageGalleryManagerProps = {
   imageUrls: string[];
   productName: string;
   onChange?: (imageUrls: string[]) => void;
+  onDeleteImage?: (index: number) => void;
+  persistChanges?: boolean;
 };
 
-export function ImageGalleryManager({ sku, imageUrls, productName, onChange }: ImageGalleryManagerProps) {
+export function ImageGalleryManager({
+  sku,
+  imageUrls,
+  productName,
+  onChange,
+  onDeleteImage,
+  persistChanges = true,
+}: ImageGalleryManagerProps) {
   const [images, setImages] = useState(imageUrls);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
@@ -52,9 +61,13 @@ export function ImageGalleryManager({ sku, imageUrls, productName, onChange }: I
     const next = [...images];
     const moved = next.splice(dragIndex, 1)[0]!;
     next.splice(index, 0, moved);
-  applyImages(next);
+    applyImages(next);
     setDragIndex(null);
     setOverIndex(null);
+
+    if (!persistChanges) {
+      return;
+    }
 
     startTransition(async () => {
       const fd = new FormData();
@@ -74,6 +87,11 @@ export function ImageGalleryManager({ sku, imageUrls, productName, onChange }: I
     const next = [...images];
     [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
     applyImages(next);
+
+    if (!persistChanges) {
+      return;
+    }
+
     startTransition(async () => {
       const fd = new FormData();
       fd.set("sku", sku);
@@ -87,6 +105,11 @@ export function ImageGalleryManager({ sku, imageUrls, productName, onChange }: I
     const next = [...images];
     [next[index], next[index + 1]] = [next[index + 1]!, next[index]!];
     applyImages(next);
+
+    if (!persistChanges) {
+      return;
+    }
+
     startTransition(async () => {
       const fd = new FormData();
       fd.set("sku", sku);
@@ -104,6 +127,15 @@ export function ImageGalleryManager({ sku, imageUrls, productName, onChange }: I
 
     const next = images.filter((url) => url !== imageUrl);
     applyImages(next);
+
+    if (onDeleteImage) {
+      onDeleteImage(index);
+      return;
+    }
+
+    if (!persistChanges) {
+      return;
+    }
 
     startTransition(async () => {
       const fd = new FormData();

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -11,6 +12,8 @@ const allowedMimeTypes = new Map([
 const maxFileSize = 5 * 1024 * 1024;
 const maxProductImageCount = 10;
 
+const defaultExternalUploadRoot = "/home/deploy/prostor-uploads";
+
 function sanitizeBaseName(value: string) {
   return value
     .toLowerCase()
@@ -18,6 +21,26 @@ function sanitizeBaseName(value: string) {
     .replace(/[^a-z0-9а-яё]+/gi, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
+}
+
+function resolveUploadRoot() {
+  const configuredRoot = process.env.UPLOADS_DIR?.trim() || process.env.MEDIA_STORAGE_DIR?.trim();
+
+  if (configuredRoot) {
+    return path.isAbsolute(configuredRoot)
+      ? configuredRoot
+      : path.resolve(process.cwd(), configuredRoot);
+  }
+
+  if (process.env.NODE_ENV === "production" && existsSync(defaultExternalUploadRoot)) {
+    return defaultExternalUploadRoot;
+  }
+
+  return path.join(process.cwd(), "public", "uploads");
+}
+
+function resolveUploadDir(kind: "products" | "banners") {
+  return path.join(resolveUploadRoot(), kind);
 }
 
 export async function saveProductImage(file: File, productSlug: string) {
@@ -36,7 +59,7 @@ export async function saveProductImage(file: File, productSlug: string) {
   }
 
   const fileName = `${sanitizeBaseName(productSlug) || "product"}-${randomUUID()}${extension}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
+  const uploadDir = resolveUploadDir("products");
   const targetPath = path.join(uploadDir, fileName);
   const buffer = Buffer.from(await file.arrayBuffer());
 
@@ -76,7 +99,7 @@ export async function saveBannerImage(file: File) {
   }
 
   const fileName = `banner-${randomUUID()}${extension}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "banners");
+  const uploadDir = resolveUploadDir("banners");
   const targetPath = path.join(uploadDir, fileName);
   const buffer = Buffer.from(await file.arrayBuffer());
 

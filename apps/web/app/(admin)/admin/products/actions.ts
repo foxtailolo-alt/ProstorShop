@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { prisma } from "@prostor/db";
 import { logAdminActivity } from "../../../../lib/audit";
 import { requirePermission } from "../../../../lib/auth/session";
@@ -29,10 +28,11 @@ function slugify(value: string) {
 }
 
 export async function upsertProductAction(
-  _: { error: string | null },
+  _: { error: string | null; savedSku: string | null; successMessage: string | null; savedAt: number | null },
   formData: FormData,
-): Promise<{ error: string | null }> {
+): Promise<{ error: string | null; savedSku: string | null; successMessage: string | null; savedAt: number | null }> {
   let savedSku = "";
+  let savedName = "";
 
   try {
     await requirePermission("products", "write");
@@ -192,6 +192,7 @@ export async function upsertProductAction(
     });
 
     savedSku = savedProduct.sku;
+    savedName = savedProduct.name;
 
     revalidatePath("/admin/products");
     revalidatePath("/admin");
@@ -200,10 +201,18 @@ export async function upsertProductAction(
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Не удалось сохранить товар.",
+      savedSku: null,
+      successMessage: null,
+      savedAt: null,
     };
   }
 
-  redirect(`/admin/products?saved=${encodeURIComponent(savedSku)}`);
+  return {
+    error: null,
+    savedSku,
+    successMessage: `Товар ${savedName || savedSku} сохранен успешно.`,
+    savedAt: Date.now(),
+  };
 }
 
 export async function deleteProductAction(formData: FormData) {

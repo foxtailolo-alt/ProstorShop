@@ -71,6 +71,36 @@ describe("AI specs route", () => {
     });
   });
 
+  it("returns a clear operator message when OpenAI blocks the server region", async () => {
+    process.env.OPENAI_API_KEY = "test-key";
+    delete process.env.OPENAI_PROXY_URL;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      text: vi.fn().mockResolvedValue(JSON.stringify({
+        error: {
+          code: "unsupported_country_region_territory",
+          message: "Country, region, or territory not supported",
+          type: "request_forbidden",
+        },
+      })),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { POST } = await import("./route");
+
+    const response = await POST(new Request("http://localhost/api/ai/specs", {
+      method: "POST",
+      body: JSON.stringify({ name: "iPhone 16", brand: "Apple" }),
+      headers: { "Content-Type": "application/json" },
+    }) as NextRequest);
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      error: "AI provider blocked this server region. Move the AI proxy to a supported region or use another OpenAI-compatible upstream.",
+      details: "Country, region, or territory not supported",
+    });
+  });
+
   it("parses markdown-wrapped JSON specs from Responses API", async () => {
     process.env.OPENAI_API_KEY = "test-key";
     delete process.env.OPENAI_PROXY_URL;

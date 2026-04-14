@@ -87,6 +87,8 @@ export async function upsertCategoryAction(formData: FormData) {
   const slugInput = String(formData.get("slug") ?? "").trim();
   const seoTitle = String(formData.get("seoTitle") ?? "").trim();
   const seoDescription = String(formData.get("seoDescription") ?? "").trim();
+  const seoKeywordsRaw = String(formData.get("seoKeywords") ?? "").trim();
+  const seoKeywords = seoKeywordsRaw ? seoKeywordsRaw.split(",").map((k) => k.trim()).filter(Boolean) : [];
   const parentId = String(formData.get("parentId") ?? "").trim() || null;
   const slug = slugInput ? slugify(slugInput) : slugify(name);
 
@@ -94,14 +96,18 @@ export async function upsertCategoryAction(formData: FormData) {
     throw new Error("Category form is incomplete.");
   }
 
+  const data = {
+    name,
+    slug,
+    parentId,
+    seoTitle: seoTitle || null,
+    seoDescription: seoDescription || null,
+    seoKeywords,
+  };
+
   const category = categoryId
-    ? await prisma.category.update({
-        where: { id: categoryId },
-        data: { name, slug, parentId, seoTitle: seoTitle || null, seoDescription: seoDescription || null },
-      })
-    : await prisma.category.create({
-        data: { name, slug, parentId, seoTitle: seoTitle || null, seoDescription: seoDescription || null },
-      });
+    ? await prisma.category.update({ where: { id: categoryId }, data })
+    : await prisma.category.create({ data });
 
   await syncCategoryFilters(category.id);
 

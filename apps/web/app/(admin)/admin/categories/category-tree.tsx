@@ -128,7 +128,48 @@ function CategoryForm({
 }) {
   const isEdit = Boolean(category);
   const slugRef = useRef<HTMLInputElement>(null);
+  const seoTitleRef = useRef<HTMLInputElement>(null);
+  const seoDescRef = useRef<HTMLInputElement>(null);
+  const seoKeywordsRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const parentRef = useRef<HTMLSelectElement>(null);
   const [slugTouched, setSlugTouched] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  function getParentPath(): string {
+    const selectedParentId = parentRef.current?.value;
+    if (!selectedParentId) return "";
+    const opt = parentOptions.find((o) => o.id === selectedParentId);
+    return opt?.label ?? "";
+  }
+
+  async function fillSeoWithAI() {
+    const name = nameRef.current?.value?.trim();
+    if (!name) { setAiError("Сначала введите название категории"); return; }
+
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const res = await fetch("/api/ai/seo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoryName: name, parentPath: getParentPath() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setAiError(data.error ?? "Ошибка ИИ"); return; }
+
+      if (seoTitleRef.current) seoTitleRef.current.value = data.seoTitle ?? "";
+      if (seoDescRef.current) seoDescRef.current.value = data.seoDescription ?? "";
+      if (seoKeywordsRef.current && Array.isArray(data.seoKeywords)) {
+        seoKeywordsRef.current.value = data.seoKeywords.join(", ");
+      }
+    } catch {
+      setAiError("Не удалось подключиться к серверу");
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   return (
     <div className="card glass admin-category-card">
@@ -140,6 +181,7 @@ function CategoryForm({
         <label className="admin-tree-field">
           <span className="admin-tree-field-label">Название</span>
           <input
+            ref={nameRef}
             name="name"
             type="text"
             placeholder="Название"
@@ -168,6 +210,7 @@ function CategoryForm({
         <label className="admin-tree-field">
           <span className="admin-tree-field-label">Родительская категория</span>
           <select
+            ref={parentRef}
             name="parentId"
             defaultValue={category?.parentId ?? parentId ?? ""}
             className="admin-inline-input"
@@ -178,9 +221,23 @@ function CategoryForm({
             ))}
           </select>
         </label>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+          <span className="admin-tree-field-label" style={{ margin: 0 }}>SEO</span>
+          <button
+            type="button"
+            className="button button-secondary button-sm"
+            onClick={fillSeoWithAI}
+            disabled={aiLoading}
+            style={{ fontSize: 12 }}
+          >
+            {aiLoading ? "ИИ думает..." : "🤖 Заполнить с ИИ"}
+          </button>
+        </div>
+        {aiError && <div style={{ color: "var(--danger, #d33)", fontSize: 13 }}>{aiError}</div>}
         <label className="admin-tree-field">
           <span className="admin-tree-field-label">SEO Title</span>
           <input
+            ref={seoTitleRef}
             name="seoTitle"
             type="text"
             placeholder="SEO заголовок"
@@ -191,10 +248,22 @@ function CategoryForm({
         <label className="admin-tree-field">
           <span className="admin-tree-field-label">SEO Description</span>
           <input
+            ref={seoDescRef}
             name="seoDescription"
             type="text"
             placeholder="SEO описание"
             defaultValue={category?.seoDescription ?? ""}
+            className="admin-inline-input"
+          />
+        </label>
+        <label className="admin-tree-field">
+          <span className="admin-tree-field-label">SEO Keywords</span>
+          <input
+            ref={seoKeywordsRef}
+            name="seoKeywords"
+            type="text"
+            placeholder="ключевые фразы через запятую"
+            defaultValue={category?.seoKeywords?.join(", ") ?? ""}
             className="admin-inline-input"
           />
         </label>

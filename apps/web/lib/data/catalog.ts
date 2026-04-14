@@ -282,6 +282,7 @@ export type CategoryTreeNode = {
   parentId: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
+  seoKeywords: string[];
   productCount: number;
   childCount: number;
   children: CategoryTreeNode[];
@@ -306,6 +307,7 @@ export async function loadCategoryTree(): Promise<CategoryTreeNode[]> {
       parentId: cat.parentId,
       seoTitle: cat.seoTitle,
       seoDescription: cat.seoDescription,
+      seoKeywords: cat.seoKeywords ?? [],
       productCount: cat._count.products,
       childCount: cat._count.children,
       children: [],

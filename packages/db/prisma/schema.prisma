@@ -55,6 +55,7 @@ model Category {
   children       Category[]          @relation("CategoryTree")
   seoTitle       String?
   seoDescription String?
+  seoKeywords    String[]            @default([])
   products       Product[]
   attributes     AttributeDefinition[]
   filterSets     FilterSet[]

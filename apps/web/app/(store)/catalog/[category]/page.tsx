@@ -44,6 +44,7 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
   return {
     title,
     description,
+    keywords: node.seoKeywords?.length ? node.seoKeywords : undefined,
     alternates: {
       canonical: buildAbsoluteUrl(`/catalog/${node.slug}`),
     },

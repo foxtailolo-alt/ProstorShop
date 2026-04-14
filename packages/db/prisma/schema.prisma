@@ -179,12 +179,12 @@ model Order {
 model OrderItem {
   id        String   @id @default(cuid())
   orderId   String
-  productId String
+  productId String?
   quantity  Int
   price     Decimal  @db.Decimal(10, 2)
   variantLabel String?
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 }
 
 model TradeInRule {

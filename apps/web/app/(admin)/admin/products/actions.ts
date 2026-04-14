@@ -232,7 +232,12 @@ export async function deleteProductAction(formData: FormData) {
 
   const product = await prisma.product.findUnique({ where: { sku } });
 
-  await prisma.product.delete({ where: { sku } });
+  await prisma.product.delete({ where: { sku } }).catch((err: unknown) => {
+    if (err && typeof err === "object" && "code" in err && (err as { code: string }).code === "P2003") {
+      throw new Error("Невозможно удалить товар: на него ссылаются заказы. Скройте товар вместо удаления.");
+    }
+    throw err;
+  });
 
   await logAdminActivity({
     entityType: "product",

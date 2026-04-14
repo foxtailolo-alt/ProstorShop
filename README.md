@@ -114,22 +114,28 @@ infra/
 - Next.js storefront with homepage, catalog, category pages, product pages, cart, trade-in page, service page, and Telegram Mini App entry page.
 - Prisma schema connected to PostgreSQL/Neon with seed data for categories, products, trade-in rules, service pricing, feature flags, and roles.
 - Telegram authentication flow for production plus localhost-only dev login for admins when Telegram widget rejects local domain.
+- **Phone authentication** — register/login by phone number and password alongside Telegram. Session cookie supports both auth methods. `SessionUser.telegramId` is optional; promo code generation falls back to `userId`.
 - Profile area with Telegram login fallback, loyalty balance, order history, stored phone, and per-user referral promo code.
+- **Auth UI redesign** — side-by-side auth cards (phone left, Telegram right) with "или" divider on `/profile` and `/login`. Telegram widget rewritten with `useEffect`+`ref` for reliable loading.
 - Promo and loyalty system in Prisma: `PromoCode`, `PointTransaction`, order promo linkage, cashback tracking, and referral owner rewards.
 - Cart/order flow with product variants, stored per-item price snapshot, promo apply/clear, and variant-aware order items.
 - Admin order workflow with cashback accrual on completion, referral reward accrual, promo visibility, and profile revalidation.
 - Role-aware admin area with operational dashboard instead of a presentation-style mock.
 - Admin product management with modal dialog: create/edit, category tree select, recommendation picker, auto-generated SKU.
 - Admin product UX hardening: inline save errors, save-in-place success feedback, local preview/reorder for newly selected images, image manager sync, and catalog revalidation after image changes.
+- **Product delete safety** — `OrderItem.productId` is now nullable with `onDelete: SetNull`. Products with existing orders can be deleted; orders show "Удалённый товар".
 - Product specs editor with AI auto-fill via OpenAI Responses API (`web_search_preview` tool for factual data from the internet).
+- **Stricter AI specs prompt** — requires official sources only (apple.com, GSMArena, iXBT, 4PDA), forbids model confusion (Pro ≠ Pro Max), returns error for unconfirmed products, uses `json_object` format.
 - AI specs endpoint supports direct OpenAI or internal proxy mode via `OPENAI_PROXY_URL` and `OPENAI_PROXY_SECRET`.
 - Production AI proxy is routed through a separate supported-region host; operator-facing AI errors now explain region blocks clearly.
+- **AI-powered SEO generation** — `/api/ai/seo` endpoint generates `seoTitle`, `seoDescription`, and `seoKeywords` for categories, targeted at Нижний Новгород with web search for semantic core. Button "Заполнить с ИИ" in category form.
 - Product options system: configurable option groups (e.g. "Storage", "SIM type") with per-variant or additive pricing and storefront option picker with dynamic price updates.
 - Product media: gallery model with up to 10 images, admin image gallery manager with reorder/delete, storefront lightbox gallery.
 - Product card media: cursor-position-based image switching on hover (left→right = first→last photo).
 - Product recommendations: schema, admin picker, storefront display section.
 - Banner carousel: admin CRUD (up to 5 active), storefront auto-rotating slider with swipe support. Recommended banner size: 2100×900px (21:9).
-- Tree-based category management with `parentId` self-relation and browsable subcategories.
+- **Hierarchical category management** — full tree UI in admin with expand/collapse, parent/leaf logic on storefront, breadcrumbs on product pages, leaf-only product assignment. Auto-slug with cyrillic transliteration.
+- `seoKeywords` field on Category model, rendered as `<meta name="keywords">` on category pages.
 - Trade-in and service request flows writing to the database.
 - Telegram bot deep links now open the Mini App directly, support `startapp` product context, and configure the menu button.
 - Telegram post publishing now returns operator-friendly errors instead of failing silently.
@@ -139,7 +145,7 @@ infra/
 - Production deployment to VPS is live on `https://88-218-64-61.sslip.io`, and Telegram login was fixed to use the real HTTPS domain instead of localhost.
 - Safe production packaging and env guards exist: `corepack pnpm deploy:pack` and `corepack pnpm --filter @prostor/web build:prod`.
 - Production media storage is externalized via `UPLOADS_DIR=/home/deploy/prostor-uploads`, and release archives no longer overwrite the uploads directory.
-- Vitest coverage expanded for banners, cart variants, AI specs route, and cart-selection helpers.
+- Vitest coverage expanded for banners, cart variants, AI specs route, cart-selection helpers, and catalog tree helpers (60 tests across 9 files).
 
 ### Remaining Work
 
@@ -147,6 +153,18 @@ infra/
 - Apply and document the Prisma migration path for production instead of relying only on `db push` as the schema continues to grow.
 - Finish production setup for Telegram posting and verify the target channel/group permissions with the current bot token.
 - Add a tracked, non-secret example for the AI proxy env and document the proxy service start/restart flow.
+- Test phone auth flow end-to-end on production (register, login, profile display, logout).
+- Consider bcrypt or argon2 for password hashing (currently SHA-256) before launching phone auth publicly.
+- Add AI SEO generation for products (currently only categories have it)
+### Remaining Work
+
+- Run a full post-deploy smoke check for the live stack: `/login`, `/profile`, cart promo flow, referral promo flow, Telegram post deep links, and Mini App launch from bot.
+- Apply and document the Prisma migration path for production instead of relying only on `db push` as the schema continues to grow.
+- Finish production setup for Telegram posting and verify the target channel/group permissions with the current bot token.
+- Add a tracked, non-secret example for the AI proxy env and document the proxy service start/restart flow.
+- Test phone auth flow end-to-end on production (register, login, profile display, logout).
+- Consider bcrypt or argon2 for password hashing (currently SHA-256) before launching phone auth publicly.
+- Add AI SEO generation for products (currently only categories have it).
 
 ## Next Session Handoff
 

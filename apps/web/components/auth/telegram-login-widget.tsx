@@ -115,12 +115,10 @@ export function TelegramLoginWidget({ redirectToDefault = "/admin" }: { redirect
   return (
     <section className="card glass">
       <div className="section-label">Вход через Telegram</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8l-1.57 7.42c-.12.54-.43.67-.88.42l-2.44-1.8-1.18 1.13c-.13.13-.24.24-.49.24l.17-2.48 4.5-4.07c.2-.17-.04-.27-.3-.1l-5.56 3.5-2.4-.75c-.52-.16-.53-.52.11-.77l9.37-3.61c.44-.16.82.1.67.77z" fill="#2AABEE"/>
-        </svg>
-        <div id="telegram-login-widget" style={{ flex: 1 }} />
-      </div>
+      <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+        Быстрый вход через ваш Telegram аккаунт.
+      </p>
+      <div id="telegram-login-widget" style={{ marginTop: 12, display: "flex", justifyContent: "center" }} />
       {error ? <p className="auth-error">{error}</p> : null}
       <Script id="telegram-widget-loader" strategy="afterInteractive">
         {`

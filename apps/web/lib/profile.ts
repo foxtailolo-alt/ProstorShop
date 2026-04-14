@@ -61,7 +61,7 @@ export async function getCurrentUserProfile() {
       createdAt: order.createdAt,
       items: order.items.map((item) => ({
         id: item.id,
-        name: item.product.name,
+        name: item.product?.name ?? "Удалённый товар",
         quantity: item.quantity,
         price: Number(item.price),
         variantLabel: item.variantLabel,

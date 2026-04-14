@@ -109,7 +109,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
                     <>
                       {order.items.map((item) => (
                         <div key={item.id} className="muted">
-                          {item.product.name}
+                          {item.product?.name ?? "Удалённый товар"}
                           {item.variantLabel ? ` (${item.variantLabel})` : ""} x {item.quantity}
                           {` — ${Number(item.price).toLocaleString("ru-RU")} ₽`}
                         </div>

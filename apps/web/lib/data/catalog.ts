@@ -272,3 +272,144 @@ export async function listActiveBanners() {
 
   return dbBanners ?? [];
 }
+
+// --- Category Tree Helpers ---
+
+export type CategoryTreeNode = {
+  id: string;
+  name: string;
+  slug: string;
+  parentId: string | null;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  productCount: number;
+  childCount: number;
+  children: CategoryTreeNode[];
+};
+
+export async function loadCategoryTree(): Promise<CategoryTreeNode[]> {
+  const flat = await safeQuery(() =>
+    prisma.category.findMany({
+      orderBy: { name: "asc" },
+      include: { _count: { select: { products: true, children: true } } },
+    }),
+  );
+
+  if (!flat) return [];
+
+  const nodeMap = new Map<string, CategoryTreeNode>();
+  for (const cat of flat) {
+    nodeMap.set(cat.id, {
+      id: cat.id,
+      name: cat.name,
+      slug: cat.slug,
+      parentId: cat.parentId,
+      seoTitle: cat.seoTitle,
+      seoDescription: cat.seoDescription,
+      productCount: cat._count.products,
+      childCount: cat._count.children,
+      children: [],
+    });
+  }
+
+  const roots: CategoryTreeNode[] = [];
+  for (const node of nodeMap.values()) {
+    if (node.parentId && nodeMap.has(node.parentId)) {
+      nodeMap.get(node.parentId)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  return roots;
+}
+
+export function findNodeInTree(tree: CategoryTreeNode[], id: string): CategoryTreeNode | null {
+  for (const node of tree) {
+    if (node.id === id) return node;
+    const found = findNodeInTree(node.children, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+export function findNodeBySlug(tree: CategoryTreeNode[], slug: string): CategoryTreeNode | null {
+  for (const node of tree) {
+    if (node.slug === slug) return node;
+    const found = findNodeBySlug(node.children, slug);
+    if (found) return found;
+  }
+  return null;
+}
+
+export function getCategoryPath(tree: CategoryTreeNode[], targetSlug: string): CategoryTreeNode[] {
+  function walk(nodes: CategoryTreeNode[], path: CategoryTreeNode[]): CategoryTreeNode[] | null {
+    for (const node of nodes) {
+      const current = [...path, node];
+      if (node.slug === targetSlug) return current;
+      const found = walk(node.children, current);
+      if (found) return found;
+    }
+    return null;
+  }
+  return walk(tree, []) ?? [];
+}
+
+export function getAllCategorySlugs(tree: CategoryTreeNode[]): string[] {
+  const slugs: string[] = [];
+  function walk(nodes: CategoryTreeNode[]) {
+    for (const node of nodes) {
+      slugs.push(node.slug);
+      walk(node.children);
+    }
+  }
+  walk(tree);
+  return slugs;
+}
+
+export function buildFlatCategoryOptions(
+  tree: CategoryTreeNode[],
+  excludeIds?: Set<string>,
+): { id: string; label: string; isLeaf: boolean }[] {
+  const options: { id: string; label: string; isLeaf: boolean }[] = [];
+  function walk(nodes: CategoryTreeNode[], prefix: string) {
+    for (const node of nodes) {
+      if (excludeIds?.has(node.id)) continue;
+      const label = prefix ? `${prefix} / ${node.name}` : node.name;
+      options.push({ id: node.id, label, isLeaf: node.children.length === 0 });
+      walk(node.children, label);
+    }
+  }
+  walk(tree, "");
+  return options;
+}
+
+function collectDescendantIds(node: CategoryTreeNode): Set<string> {
+  const ids = new Set<string>([node.id]);
+  for (const child of node.children) {
+    for (const id of collectDescendantIds(child)) {
+      ids.add(id);
+    }
+  }
+  return ids;
+}
+
+export function getDescendantIds(tree: CategoryTreeNode[], nodeId: string): Set<string> {
+  const node = findNodeInTree(tree, nodeId);
+  if (!node) return new Set();
+  const ids = collectDescendantIds(node);
+  ids.delete(nodeId);
+  return ids;
+}
+
+export async function isCategoryLeaf(categorySlug: string): Promise<boolean> {
+  if (!databaseConfigured()) return true;
+  const category = await safeQuery(() =>
+    prisma.category.findUnique({
+      where: { slug: categorySlug },
+      include: { _count: { select: { children: true } } },
+    }),
+  );
+  if (!category) return true;
+  return category._count.children === 0;
+}

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { BootstrapLoginCard } from "../../components/auth/bootstrap-login-card";
 import { DevLoginCard } from "../../components/auth/dev-login-card";
+import { PhoneLoginCard } from "../../components/auth/phone-login-card";
 import { TelegramLoginWidget } from "../../components/auth/telegram-login-widget";
 import { getSession, isAdminSession } from "../../lib/auth/session";
 import { getAttributionEntries, getAttributionSnapshot } from "../../lib/attribution";
@@ -39,10 +40,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     <main className="page shell">
       <section className="hero glass">
         <div className="section-label">Авторизация</div>
-        <h1>Вход в Простор через Telegram.</h1>
+        <h1>Вход в Простор</h1>
         <p>
-          Один вход для клиента, Mini App и админки. На этом этапе права администратора выдаются
-          тем Telegram ID, которые перечислены в `TELEGRAM_ADMIN_IDS`.
+          Войдите через Telegram или по номеру телефона.
+          Один аккаунт для клиента, Mini App и админки.
         </p>
         {attributionEntries.length > 0 ? (
           <div className="actions">
@@ -55,7 +56,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         ) : null}
       </section>
 
-      <div style={{ marginTop: 18 }}>
+      <div className="auth-row" style={{ marginTop: 18 }}>
+        <PhoneLoginCard redirectTo={target} />
+        <div className="auth-divider">
+          <div className="auth-divider-line" />
+          <span className="muted auth-divider-text">или</span>
+          <div className="auth-divider-line" />
+        </div>
         <TelegramLoginWidget redirectToDefault="/admin" />
       </div>
 

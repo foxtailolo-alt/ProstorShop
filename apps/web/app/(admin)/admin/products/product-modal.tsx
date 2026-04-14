@@ -166,12 +166,13 @@ export function ProductModal({
     router.refresh();
   }, [formState.savedAt, formState.savedSku, formState.successMessage, onSaved, router]);
 
-  // Build flat options with indentation for tree categories
-  const flatOptions: { slug: string; label: string }[] = [];
+  // Build flat options with indentation for tree categories (leaf-only)
+  const flatOptions: { slug: string; label: string; disabled: boolean }[] = [];
   function walkTree(nodes: CategoryNode[], depth: number) {
     for (const node of nodes) {
       const prefix = depth > 0 ? "— ".repeat(depth) : "";
-      flatOptions.push({ slug: node.slug, label: `${prefix}${node.name}` });
+      const isLeaf = node.children.length === 0;
+      flatOptions.push({ slug: node.slug, label: `${prefix}${node.name}`, disabled: !isLeaf });
       if (node.children.length > 0) {
         walkTree(node.children, depth + 1);
       }
@@ -383,7 +384,9 @@ export function ProductModal({
                 onChange={(e) => setSelectedCategorySlug(e.target.value)}
               >
                 {flatOptions.map((opt) => (
-                  <option key={opt.slug} value={opt.slug}>{opt.label}</option>
+                  <option key={opt.slug} value={opt.slug} disabled={opt.disabled}>
+                    {opt.label}{opt.disabled ? " (группа)" : ""}
+                  </option>
                 ))}
               </select>
             </label>

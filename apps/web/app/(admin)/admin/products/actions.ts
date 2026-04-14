@@ -77,10 +77,17 @@ export async function upsertProductAction(
       throw new Error("Product form is incomplete.");
     }
 
-    const category = await prisma.category.findUnique({ where: { slug: categorySlug } });
+    const category = await prisma.category.findUnique({
+      where: { slug: categorySlug },
+      include: { _count: { select: { children: true } } },
+    });
 
     if (!category) {
       throw new Error("Category not found.");
+    }
+
+    if (category._count.children > 0) {
+      throw new Error("Товар можно добавлять только в конечную категорию без подкатегорий.");
     }
 
     const productSlug = slugify(name);

@@ -208,7 +208,7 @@ export async function getUserReferralPromoCode(userId: string) {
 
 export async function ensureReferralPromoCodeForUser(input: {
   userId: string;
-  telegramId: string;
+  telegramId?: string | null;
   username?: string | null;
 }) {
   const existing = await getUserReferralPromoCode(input.userId);
@@ -217,9 +217,10 @@ export async function ensureReferralPromoCodeForUser(input: {
     return existing;
   }
 
+  const idSuffix = input.telegramId?.slice(-6) ?? input.userId.slice(-6);
   const basePrefix = normalizePromoCode(
-    input.username ? `${input.username}-${input.telegramId.slice(-4)}` : `USER-${input.telegramId.slice(-6)}`,
-  ) || `USER-${input.telegramId.slice(-6)}`;
+    input.username ? `${input.username}-${idSuffix.slice(-4)}` : `USER-${idSuffix}`,
+  ) || `USER-${idSuffix}`;
   let candidate = basePrefix;
   let suffix = 1;
 

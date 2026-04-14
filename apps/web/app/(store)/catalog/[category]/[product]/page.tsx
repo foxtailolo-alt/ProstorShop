@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { catalogProducts } from "@prostor/core";
 import { StoreNav } from "../../../../../components/layout/store-nav";
 import { buildAbsoluteUrl } from "../../../../../lib/seo";
-import { findCatalogCategory, findCatalogProduct, getProductRecommendations, getProductOptions } from "../../../../../lib/data/catalog";
+import { findCatalogCategory, findCatalogProduct, getProductRecommendations, getProductOptions, loadCategoryTree, getCategoryPath } from "../../../../../lib/data/catalog";
 import { addToCartAction } from "../../../cart/actions";
 import { ProductGallery } from "../../../../../components/product/product-gallery";
 import { ProductInfoWithOptions } from "../../../../../components/product/product-info-options";
@@ -57,8 +57,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
     notFound();
   }
 
-  const recommendations = await getProductRecommendations(currentProduct.slug);
-  const productOptions = await getProductOptions(currentProduct.slug);
+  const [recommendations, productOptions, tree] = await Promise.all([
+    getProductRecommendations(currentProduct.slug),
+    getProductOptions(currentProduct.slug),
+    loadCategoryTree(),
+  ]);
+
+  const ancestors = getCategoryPath(tree, category).slice(0, -1);
 
   const productImages = currentProduct.imageUrls?.length
     ? currentProduct.imageUrls
@@ -94,6 +99,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
       <div className="breadcrumbs">
         <Link href="/catalog">Каталог</Link>
+        {ancestors.map((anc) => (
+          <span key={anc.slug}>
+            <span className="breadcrumb-sep">/</span>
+            <Link href={`/catalog/${anc.slug}`}>{anc.name}</Link>
+          </span>
+        ))}
         <span className="breadcrumb-sep">/</span>
         <Link href={`/catalog/${currentCategory.slug}`}>{currentCategory.name}</Link>
         <span className="breadcrumb-sep">/</span>

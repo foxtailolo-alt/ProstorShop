@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { StoreNav } from "../../../components/layout/store-nav";
 import { TelegramLoginWidget } from "../../../components/auth/telegram-login-widget";
+import { PhoneLoginCard } from "../../../components/auth/phone-login-card";
 import { getCurrentUserProfile } from "../../../lib/profile";
 
 const statusLabels: Record<string, string> = {
@@ -27,11 +28,19 @@ export default async function ProfilePage() {
       {!profile ? (
         <section className="store-section">
           <div className="glass" style={{ padding: 24, display: "grid", gap: 16 }}>
-            <h2>Вход через Telegram</h2>
+            <h2>Вход в Простор</h2>
             <p className="muted">
               Авторизуйтесь, чтобы увидеть историю заказов, баланс баллов и свой реферальный промокод.
             </p>
-            <TelegramLoginWidget redirectToDefault="/profile" />
+            <div className="auth-row">
+              <PhoneLoginCard redirectTo="/profile" />
+              <div className="auth-divider">
+                <div className="auth-divider-line" />
+                <span className="muted auth-divider-text">или</span>
+                <div className="auth-divider-line" />
+              </div>
+              <TelegramLoginWidget redirectToDefault="/profile" />
+            </div>
           </div>
         </section>
       ) : (

@@ -14,7 +14,8 @@ model User {
   telegramUsername String?
   firstName        String?
   lastName         String?
-  phone            String?
+  phone            String?          @unique
+  passwordHash     String?
   loyaltyPoints    Int              @default(0)
   roleAssignments  RoleAssignment[]
   promoCodes       PromoCode[]      @relation("PromoCodeOwner")

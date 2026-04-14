@@ -4,7 +4,7 @@ export type SessionRole = AdminRole | "customer";
 
 export type SessionUser = {
   id: string;
-  telegramId: string;
+  telegramId?: string | null;
   username?: string | null;
   firstName?: string | null;
   lastName?: string | null;

@@ -118,7 +118,14 @@ export async function deleteCategoryAction(formData: FormData) {
     throw new Error("Category id is required.");
   }
 
-  const productCount = await prisma.product.count({ where: { categoryId } });
+  const [productCount, childCount] = await Promise.all([
+    prisma.product.count({ where: { categoryId } }),
+    prisma.category.count({ where: { parentId: categoryId } }),
+  ]);
+
+  if (childCount > 0) {
+    throw new Error("Нельзя удалить категорию с подкатегориями. Сначала удалите вложенные категории.");
+  }
 
   if (productCount > 0) {
     throw new Error("Нельзя удалить категорию, в которой есть товары.");

@@ -1,9 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import type { CategoryTreeNode } from "../../../../lib/data/catalog";
 import { upsertCategoryAction, deleteCategoryAction } from "./actions";
 import { ConfirmButton } from "../../../../components/admin/confirm-button";
+
+const cyrMap: Record<string, string> = {
+  а:"a",б:"b",в:"v",г:"g",д:"d",е:"e",ё:"yo",ж:"zh",з:"z",и:"i",й:"y",к:"k",
+  л:"l",м:"m",н:"n",о:"o",п:"p",р:"r",с:"s",т:"t",у:"u",ф:"f",х:"kh",ц:"ts",
+  ч:"ch",ш:"sh",щ:"shch",ъ:"",ы:"y",ь:"",э:"e",ю:"yu",я:"ya",
+};
+
+function toSlug(value: string) {
+  return value
+    .toLowerCase()
+    .split("")
+    .map((ch) => cyrMap[ch] ?? ch)
+    .join("")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 type Props = {
   tree: CategoryTreeNode[];
@@ -111,6 +127,8 @@ function CategoryForm({
   onCancel?: () => void;
 }) {
   const isEdit = Boolean(category);
+  const slugRef = useRef<HTMLInputElement>(null);
+  const [slugTouched, setSlugTouched] = useState(false);
 
   return (
     <div className="card glass admin-category-card">
@@ -128,16 +146,23 @@ function CategoryForm({
             defaultValue={category?.name ?? ""}
             required
             className="admin-inline-input"
+            onChange={(e) => {
+              if (!slugTouched && slugRef.current) {
+                slugRef.current.value = toSlug(e.target.value);
+              }
+            }}
           />
         </label>
         <label className="admin-tree-field">
           <span className="admin-tree-field-label">Slug</span>
           <input
+            ref={slugRef}
             name="slug"
             type="text"
             placeholder="auto"
             defaultValue={category?.slug ?? ""}
             className="admin-inline-input admin-inline-input-sm"
+            onChange={() => setSlugTouched(true)}
           />
         </label>
         <label className="admin-tree-field">

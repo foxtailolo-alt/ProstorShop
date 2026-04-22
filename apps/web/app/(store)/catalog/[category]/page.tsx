@@ -3,10 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StoreNav } from "../../../../components/layout/store-nav";
 import { ProductCardMedia } from "../../../../components/product/product-card-media";
+import { BannerCarousel } from "../../../../components/store/banner-carousel";
 import { buildAbsoluteUrl } from "../../../../lib/seo";
 import { addToCartAction } from "../../cart/actions";
 import {
   listCatalogProducts,
+  listActiveBanners,
   loadCategoryTree,
   findNodeBySlug,
   getCategoryPath,
@@ -19,6 +21,8 @@ type CategoryPageProps = {
     category: string;
   }>;
 };
+
+export const dynamic = "force-dynamic";
 
 function countTreeProducts(node: CategoryTreeNode): number {
   return node.productCount + node.children.reduce((sum, child) => sum + countTreeProducts(child), 0);
@@ -59,7 +63,7 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
 
 export default async function CategoryPage({ params }: CategoryPageProps) {
   const { category } = await params;
-  const tree = await loadCategoryTree();
+  const [tree, banners] = await Promise.all([loadCategoryTree(), listActiveBanners(category)]);
   const node = findNodeBySlug(tree, category);
 
   if (!node) {
@@ -88,6 +92,12 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
         <h1 className="store-page-title">{node.name}</h1>
         {node.seoDescription && <p className="store-page-subtitle">{node.seoDescription}</p>}
       </section>
+
+      {banners.length > 0 ? (
+        <section className="store-section animate-fade-up">
+          <BannerCarousel banners={banners} />
+        </section>
+      ) : null}
 
       {isLeaf ? (
         <LeafCategoryProducts categorySlug={category} />

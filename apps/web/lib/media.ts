@@ -39,7 +39,7 @@ function resolveUploadRoot() {
   return path.join(process.cwd(), "public", "uploads");
 }
 
-function resolveUploadDir(kind: "products" | "banners") {
+function resolveUploadDir(kind: "products" | "banners" | "categories") {
   return path.join(resolveUploadRoot(), kind);
 }
 
@@ -107,4 +107,30 @@ export async function saveBannerImage(file: File) {
   await writeFile(targetPath, buffer);
 
   return `/uploads/banners/${fileName}`;
+}
+
+export async function saveCategoryImage(file: File, categorySlug: string) {
+  if (!file || file.size === 0) {
+    return null;
+  }
+
+  const extension = allowedMimeTypes.get(file.type);
+
+  if (!extension) {
+    throw new Error("Only JPG, PNG, and WebP images are supported.");
+  }
+
+  if (file.size > maxFileSize) {
+    throw new Error("Image must be 5 MB or smaller.");
+  }
+
+  const fileName = `${sanitizeBaseName(categorySlug) || "category"}-${randomUUID()}${extension}`;
+  const uploadDir = resolveUploadDir("categories");
+  const targetPath = path.join(uploadDir, fileName);
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  await mkdir(uploadDir, { recursive: true });
+  await writeFile(targetPath, buffer);
+
+  return `/uploads/categories/${fileName}`;
 }

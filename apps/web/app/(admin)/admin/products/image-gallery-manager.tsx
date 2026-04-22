@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { reorderProductImagesAction, deleteProductImageAction } from "./actions";
+import { reorderProductImagesAction, deleteProductImageAction, cropProductImageAction, removeImageBackgroundAction } from "./actions";
+import { ImageCropModal } from "./image-crop-modal";
 
 type ImageGalleryManagerProps = {
   sku: string;
@@ -24,6 +25,8 @@ export function ImageGalleryManager({
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [cropIndex, setCropIndex] = useState<number | null>(null);
+  const [removingBg, setRemovingBg] = useState<number | null>(null);
 
   useEffect(() => {
     setImages(imageUrls);
@@ -150,6 +153,54 @@ export function ImageGalleryManager({
     });
   }
 
+  function handleCropSave(crop: { x: number; y: number; w: number; h: number }, index: number) {
+    const oldUrl = images[index];
+    if (!oldUrl) return;
+    setCropIndex(null);
+
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("sku", sku);
+      fd.set("imageUrl", oldUrl);
+      fd.set("cx", String(crop.x));
+      fd.set("cy", String(crop.y));
+      fd.set("cw", String(crop.w));
+      fd.set("ch", String(crop.h));
+      try {
+        const result = await cropProductImageAction(fd);
+        if (result.newUrl) {
+          const next = images.map((url) => (url === oldUrl ? result.newUrl : url));
+          applyImages(next);
+        }
+      } catch {
+        // keep current
+      }
+    });
+  }
+
+  function handleRemoveBg(index: number) {
+    const url = images[index];
+    if (!url) return;
+    setRemovingBg(index);
+
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("sku", sku);
+      fd.set("imageUrl", url);
+      try {
+        const result = await removeImageBackgroundAction(fd);
+        if (result.newUrl) {
+          const next = images.map((u) => (u === url ? result.newUrl : u));
+          applyImages(next);
+        }
+      } catch {
+        // keep current
+      } finally {
+        setRemovingBg(null);
+      }
+    });
+  }
+
   return (
     <div className={`admin-gallery-manager ${isPending ? "admin-gallery-pending" : ""}`}>
       <div className="admin-gallery-grid">
@@ -168,6 +219,9 @@ export function ImageGalleryManager({
             <div className="admin-gallery-badge">
               {index === 0 ? "Главное" : index + 1}
             </div>
+            {removingBg === index && (
+              <div className="admin-gallery-loading">Удаление фона...</div>
+            )}
             <div className="admin-gallery-controls">
               <button
                 type="button"
@@ -189,6 +243,24 @@ export function ImageGalleryManager({
               </button>
               <button
                 type="button"
+                className="admin-gallery-btn"
+                title="Кадрировать"
+                disabled={isPending}
+                onClick={() => setCropIndex(index)}
+              >
+                ✂
+              </button>
+              <button
+                type="button"
+                className="admin-gallery-btn"
+                title="Удалить фон"
+                disabled={isPending}
+                onClick={() => handleRemoveBg(index)}
+              >
+                🪄
+              </button>
+              <button
+                type="button"
                 className="admin-gallery-btn admin-gallery-btn-delete"
                 title="Удалить фото"
                 disabled={isPending}
@@ -201,6 +273,14 @@ export function ImageGalleryManager({
         ))}
       </div>
       <p className="muted">Перетаскивайте или используйте стрелки для смены порядка. Первое фото — главное.</p>
+
+      {cropIndex !== null && images[cropIndex] && (
+        <ImageCropModal
+          src={images[cropIndex]}
+          onSave={(crop) => handleCropSave(crop, cropIndex)}
+          onClose={() => setCropIndex(null)}
+        />
+      )}
     </div>
   );
 }

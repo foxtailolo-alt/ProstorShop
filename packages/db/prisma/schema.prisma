@@ -50,6 +50,7 @@ model Category {
   id             String              @id @default(cuid())
   name           String
   slug           String              @unique
+  imageUrl       String?
   parentId       String?
   parent         Category?           @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
   children       Category[]          @relation("CategoryTree")
@@ -86,6 +87,7 @@ model Product {
   telegramPosts TelegramPost[]
   recommendedBy  ProductRecommendation[] @relation("RecommendedProduct")
   recommendations ProductRecommendation[] @relation("SourceProduct")
+  homepageItems   HomepageItem[]
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 }
@@ -304,10 +306,13 @@ model Banner {
   title     String?
   imageUrl  String
   linkUrl   String
+  categorySlug String?
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([categorySlug, isActive, sortOrder])
 }
 
 model FeatureFlag {
@@ -329,4 +334,30 @@ model ActivityLog {
   createdAt  DateTime @default(now())
 
   @@index([createdAt])
+}
+
+model HomepageSection {
+  id        String         @id @default(cuid())
+  type      String         // bestsellers, recommendations, custom
+  title     String
+  sortOrder Int            @default(0)
+  isActive  Boolean        @default(true)
+  items     HomepageItem[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+model HomepageItem {
+  id            String          @id @default(cuid())
+  sectionId     String
+  section       HomepageSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  productId     String?
+  product       Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  position      Int             @default(0)
+  isHighlighted Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+
+  @@index([sectionId, position])
 }

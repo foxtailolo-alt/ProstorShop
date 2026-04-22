@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@prostor/db";
 import { logAdminActivity } from "../../../../lib/audit";
 import { requirePermission } from "../../../../lib/auth/session";
-import { saveProductImages } from "../../../../lib/media";
+import { saveProductImages, saveProductImage } from "../../../../lib/media";
 
 const maxProductImageCount = 10;
 
@@ -415,4 +415,201 @@ export async function deleteProductImageAction(formData: FormData) {
   revalidatePath("/admin/products");
   revalidatePath("/catalog");
   revalidatePath(`/catalog/${product.slug}`);
+}
+
+export async function replaceProductImageAction(formData: FormData) {
+  await requirePermission("products", "write");
+  const sku = String(formData.get("sku") ?? "").trim();
+  const oldUrl = String(formData.get("oldUrl") ?? "").trim();
+  const file = formData.get("file") as File | null;
+
+  if (!sku || !oldUrl || !file || file.size === 0) {
+    throw new Error("Invalid replace image request.");
+  }
+
+  const product = await prisma.product.findUnique({ where: { sku } });
+  if (!product) throw new Error("Product not found.");
+
+  const newUrl = await saveProductImage(file, product.slug);
+  if (!newUrl) throw new Error("Failed to save image.");
+
+  const urls = product.imageUrls ?? [];
+  const updatedUrls = urls.map((url) => (url === oldUrl ? newUrl : url));
+
+  await prisma.product.update({
+    where: { id: product.id },
+    data: {
+      imageUrls: updatedUrls,
+      imageUrl: updatedUrls[0] ?? null,
+    },
+  });
+
+  revalidatePath("/admin/products");
+  revalidatePath("/catalog");
+  return { newUrl };
+}
+
+export async function cropProductImageAction(formData: FormData) {
+  await requirePermission("products", "write");
+  const sku = String(formData.get("sku") ?? "").trim();
+  const imageUrl = String(formData.get("imageUrl") ?? "").trim();
+  const cx = Number(formData.get("cx"));
+  const cy = Number(formData.get("cy"));
+  const cw = Number(formData.get("cw"));
+  const ch = Number(formData.get("ch"));
+
+  if (!sku || !imageUrl || !cw || !ch) {
+    throw new Error("Invalid crop request.");
+  }
+
+  const product = await prisma.product.findUnique({ where: { sku } });
+  if (!product) throw new Error("Product not found.");
+
+  // Fetch the image
+  let inputBuffer: Buffer;
+  if (imageUrl.startsWith("http")) {
+    const resp = await fetch(imageUrl);
+    if (!resp.ok) throw new Error("Failed to fetch image.");
+    inputBuffer = Buffer.from(await resp.arrayBuffer());
+  } else {
+    const fs = await import("node:fs/promises");
+    const pathMod = await import("node:path");
+    const root = process.env.UPLOADS_DIR?.trim()
+      || (process.env.NODE_ENV === "production" ? "/home/deploy/prostor-uploads" : pathMod.join(process.cwd(), "public", "uploads"));
+    const relPath = imageUrl.replace(/^\/uploads\//, "");
+    inputBuffer = await fs.readFile(pathMod.join(root, relPath));
+  }
+
+  const sharp = (await import("sharp")).default;
+  const croppedBuffer = await sharp(inputBuffer)
+    .extract({ left: cx, top: cy, width: cw, height: ch })
+    .webp({ quality: 92 })
+    .toBuffer();
+
+  const file = new File([new Uint8Array(croppedBuffer)], "cropped.webp", { type: "image/webp" });
+  const newUrl = await saveProductImage(file, product.slug);
+  if (!newUrl) throw new Error("Failed to save cropped image.");
+
+  const urls = product.imageUrls ?? [];
+  const updatedUrls = urls.map((url) => (url === imageUrl ? newUrl : url));
+
+  await prisma.product.update({
+    where: { id: product.id },
+    data: {
+      imageUrls: updatedUrls,
+      imageUrl: updatedUrls[0] ?? null,
+    },
+  });
+
+  revalidatePath("/admin/products");
+  revalidatePath("/catalog");
+  return { newUrl };
+}
+
+export async function removeImageBackgroundAction(formData: FormData) {
+  await requirePermission("products", "write");
+  const sku = String(formData.get("sku") ?? "").trim();
+  const imageUrl = String(formData.get("imageUrl") ?? "").trim();
+
+  if (!sku || !imageUrl) {
+    throw new Error("Invalid background removal request.");
+  }
+
+  const product = await prisma.product.findUnique({ where: { sku } });
+  if (!product) throw new Error("Product not found.");
+
+  // Fetch the image
+  let inputBuffer: Buffer;
+  if (imageUrl.startsWith("http")) {
+    const resp = await fetch(imageUrl);
+    if (!resp.ok) throw new Error("Failed to fetch image.");
+    inputBuffer = Buffer.from(await resp.arrayBuffer());
+  } else {
+    const fs = await import("node:fs/promises");
+    const pathMod = await import("node:path");
+    const root = process.env.UPLOADS_DIR?.trim()
+      || (process.env.NODE_ENV === "production" ? "/home/deploy/prostor-uploads" : pathMod.join(process.cwd(), "public", "uploads"));
+    const relPath = imageUrl.replace(/^\/uploads\//, "");
+    inputBuffer = await fs.readFile(pathMod.join(root, relPath));
+  }
+
+  const sharp = (await import("sharp")).default;
+
+  // Extract raw pixel data
+  const { data: rawPixels, info } = await sharp(inputBuffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const pixels = new Uint8Array(rawPixels);
+  const totalPixels = info.width * info.height;
+
+  // Sample corners to determine background color
+  const samplePositions = [
+    0,
+    info.width - 1,
+    (info.height - 1) * info.width,
+    totalPixels - 1,
+  ];
+
+  let bgR = 0, bgG = 0, bgB = 0, samples = 0;
+  for (const pos of samplePositions) {
+    const i = pos * 4;
+    bgR += pixels[i]!;
+    bgG += pixels[i + 1]!;
+    bgB += pixels[i + 2]!;
+    samples++;
+  }
+  bgR = Math.round(bgR / samples);
+  bgG = Math.round(bgG / samples);
+  bgB = Math.round(bgB / samples);
+
+  // Make similar-colored pixels transparent
+  const tolerance = 42;
+  for (let i = 0; i < totalPixels; i++) {
+    const idx = i * 4;
+    const r = pixels[idx]!;
+    const g = pixels[idx + 1]!;
+    const b = pixels[idx + 2]!;
+
+    const dist = Math.sqrt((r - bgR) ** 2 + (g - bgG) ** 2 + (b - bgB) ** 2);
+
+    if (dist < tolerance) {
+      pixels[idx + 3] = 0;
+    } else if (dist < tolerance * 1.5) {
+      const alpha = Math.round(((dist - tolerance) / (tolerance * 0.5)) * 255);
+      pixels[idx + 3] = Math.min(pixels[idx + 3]!, alpha);
+    }
+  }
+
+  // Save as PNG
+  const resultBuffer = await sharp(Buffer.from(pixels.buffer), {
+    raw: { width: info.width, height: info.height, channels: 4 },
+  }).png().toBuffer();
+
+  const { randomUUID } = await import("node:crypto");
+  const fsMod = await import("node:fs/promises");
+  const pathMod = await import("node:path");
+  const root = process.env.UPLOADS_DIR?.trim()
+    || (process.env.NODE_ENV === "production" ? "/home/deploy/prostor-uploads" : pathMod.join(process.cwd(), "public", "uploads"));
+  const uploadDir = pathMod.join(root, "products");
+  await fsMod.mkdir(uploadDir, { recursive: true });
+  const fileName = `${product.slug}-nobg-${randomUUID()}.png`;
+  await fsMod.writeFile(pathMod.join(uploadDir, fileName), resultBuffer);
+  const newUrl = `/uploads/products/${fileName}`;
+
+  const urls = product.imageUrls ?? [];
+  const updatedUrls = urls.map((url) => (url === imageUrl ? newUrl : url));
+
+  await prisma.product.update({
+    where: { id: product.id },
+    data: {
+      imageUrls: updatedUrls,
+      imageUrl: updatedUrls[0] ?? null,
+    },
+  });
+
+  revalidatePath("/admin/products");
+  revalidatePath("/catalog");
+  return { newUrl };
 }

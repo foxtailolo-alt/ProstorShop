@@ -23,6 +23,9 @@ vi.mock("@prostor/db", () => ({
       findUnique: mockBannerFindUnique,
       update: mockBannerUpdate,
     },
+    category: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 
@@ -48,6 +51,7 @@ describe("banner actions", () => {
       id: "banner-1",
       title: "Весенняя акция",
       linkUrl: "/catalog/iphone",
+      categorySlug: null,
       isActive: false,
     });
     mockBannerUpdate.mockResolvedValue({ id: "banner-1" });
@@ -75,6 +79,7 @@ describe("banner actions", () => {
         title: "Весенняя акция",
         imageUrl: "/uploads/banners/new-banner.jpg",
         linkUrl: "/catalog/iphone",
+        categorySlug: null,
         sortOrder: 3,
         isActive: true,
       },
@@ -83,7 +88,7 @@ describe("banner actions", () => {
       entityType: "banner",
       entityId: "banner-1",
       action: "create",
-      summary: "Баннер создан: Весенняя акция",
+      summary: "Баннер создан: Весенняя акция (главная страница)",
     });
     expect(mockRevalidatePath).toHaveBeenCalledWith("/admin/banners");
     expect(mockRevalidatePath).toHaveBeenCalledWith("/");
@@ -118,8 +123,55 @@ describe("banner actions", () => {
       entityType: "banner",
       entityId: "banner-1",
       action: "delete",
-      summary: "Баннер удалён: Весенняя акция",
+      summary: "Баннер удалён: Весенняя акция (главная страница)",
     });
+  });
+
+  it("creates a category banner with placement scope", async () => {
+    const { prisma } = await import("@prostor/db");
+    const { upsertBannerAction } = await import("./actions");
+
+    vi.mocked(prisma.category.findUnique).mockResolvedValue({
+      id: "category-1",
+      slug: "iphone",
+      name: "iPhone",
+      imageUrl: null,
+      parentId: null,
+      seoTitle: null,
+      seoDescription: null,
+      seoKeywords: [],
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    const formData = new FormData();
+    formData.set("title", "iPhone баннер");
+    formData.set("placement", "category");
+    formData.set("categorySlug", "iphone");
+    formData.set("linkUrl", "/catalog/iphone");
+    formData.set("sortOrder", "1");
+    formData.set("isActive", "on");
+    formData.set("existingImageUrl", "/uploads/banners/existing.jpg");
+
+    await upsertBannerAction(formData);
+
+    expect(mockBannerCount).toHaveBeenCalledWith({
+      where: {
+        isActive: true,
+        categorySlug: "iphone",
+      },
+    });
+    expect(mockBannerCreate).toHaveBeenCalledWith({
+      data: {
+        title: "iPhone баннер",
+        imageUrl: "/uploads/banners/existing.jpg",
+        linkUrl: "/catalog/iphone",
+        categorySlug: "iphone",
+        sortOrder: 1,
+        isActive: true,
+      },
+    });
+    expect(mockRevalidatePath).toHaveBeenCalledWith("/catalog/iphone");
   });
 
   it("prevents activating a sixth banner", async () => {
@@ -128,6 +180,7 @@ describe("banner actions", () => {
       id: "banner-1",
       title: "Запасной баннер",
       linkUrl: "/catalog/ipad",
+      categorySlug: null,
       isActive: false,
     });
     mockBannerCount.mockResolvedValue(5);
@@ -145,6 +198,7 @@ describe("banner actions", () => {
       id: "banner-1",
       title: "Запасной баннер",
       linkUrl: "/catalog/ipad",
+      categorySlug: null,
       isActive: false,
     });
     mockBannerCount.mockResolvedValue(4);

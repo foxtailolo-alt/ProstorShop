@@ -12,8 +12,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@prostor/db": "workspace:*",
     "@prostor/core": "workspace:*",
+    "@prostor/db": "workspace:*",
     "@prostor/ui": "workspace:*",
     "next": "^15.2.4",
     "react": "^19.1.0",
@@ -24,6 +24,7 @@
   "devDependencies": {
     "@types/node": "^22.14.1",
     "@types/react": "^19.1.2",
-    "@types/react-dom": "^19.1.2"
+    "@types/react-dom": "^19.1.2",
+    "sharp": "^0.34.5"
   }
 }

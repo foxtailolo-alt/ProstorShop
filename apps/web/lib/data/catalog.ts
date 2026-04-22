@@ -261,10 +261,18 @@ export async function getRuntimeFeatureFlags(): Promise<FeatureFlags> {
   );
 }
 
-export async function listActiveBanners() {
+export async function listActiveBanners(categorySlug?: string) {
   const dbBanners = await safeQuery(() =>
     prisma.banner.findMany({
-      where: { isActive: true },
+      where: categorySlug
+        ? {
+            isActive: true,
+            categorySlug,
+          }
+        : {
+            isActive: true,
+            categorySlug: null,
+          },
       orderBy: { sortOrder: "asc" },
       take: 5,
     }),
@@ -279,6 +287,7 @@ export type CategoryTreeNode = {
   id: string;
   name: string;
   slug: string;
+  imageUrl: string | null;
   parentId: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
@@ -304,6 +313,7 @@ export async function loadCategoryTree(): Promise<CategoryTreeNode[]> {
       id: cat.id,
       name: cat.name,
       slug: cat.slug,
+      imageUrl: cat.imageUrl,
       parentId: cat.parentId,
       seoTitle: cat.seoTitle,
       seoDescription: cat.seoDescription,
@@ -372,13 +382,13 @@ export function getAllCategorySlugs(tree: CategoryTreeNode[]): string[] {
 export function buildFlatCategoryOptions(
   tree: CategoryTreeNode[],
   excludeIds?: Set<string>,
-): { id: string; label: string; isLeaf: boolean }[] {
-  const options: { id: string; label: string; isLeaf: boolean }[] = [];
+): { id: string; slug: string; label: string; isLeaf: boolean }[] {
+  const options: { id: string; slug: string; label: string; isLeaf: boolean }[] = [];
   function walk(nodes: CategoryTreeNode[], prefix: string) {
     for (const node of nodes) {
       if (excludeIds?.has(node.id)) continue;
       const label = prefix ? `${prefix} / ${node.name}` : node.name;
-      options.push({ id: node.id, label, isLeaf: node.children.length === 0 });
+      options.push({ id: node.id, slug: node.slug, label, isLeaf: node.children.length === 0 });
       walk(node.children, label);
     }
   }
@@ -414,4 +424,83 @@ export async function isCategoryLeaf(categorySlug: string): Promise<boolean> {
   );
   if (!category) return true;
   return category._count.children === 0;
+}
+
+// --- Homepage Sections ---
+
+export type HomepageSectionData = {
+  id: string;
+  type: string;
+  title: string;
+  sortOrder: number;
+  items: HomepageSectionItem[];
+};
+
+export type HomepageSectionItem = {
+  id: string;
+  position: number;
+  isHighlighted: boolean;
+  product: {
+    slug: string;
+    name: string;
+    brand: string;
+    imageUrl: string | null;
+    imageUrls: string[];
+    price: number;
+    compareAtPrice?: number;
+    inStock: boolean;
+    categorySlug: string;
+    badge?: string;
+  } | null;
+};
+
+export async function loadHomepageSections(): Promise<HomepageSectionData[]> {
+  const sections = await safeQuery(() =>
+    prisma.homepageSection.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: "asc" },
+      include: {
+        items: {
+          orderBy: { position: "asc" },
+          include: {
+            product: {
+              include: { category: true },
+            },
+          },
+        },
+      },
+    }),
+  );
+
+  if (!sections) return [];
+
+  return sections.map((section) => ({
+    id: section.id,
+    type: section.type,
+    title: section.title,
+    sortOrder: section.sortOrder,
+    items: section.items
+      .filter((item) => item.product)
+      .map((item) => ({
+        id: item.id,
+        position: item.position,
+        isHighlighted: item.isHighlighted,
+        product: item.product
+          ? {
+              slug: item.product.slug,
+              name: item.product.name,
+              brand: item.product.brand,
+              imageUrl: item.product.imageUrls[0] ?? item.product.imageUrl,
+              imageUrls: item.product.imageUrls.length > 0
+                ? item.product.imageUrls
+                : item.product.imageUrl
+                  ? [item.product.imageUrl]
+                  : [],
+              price: Number(item.product.price),
+              inStock: item.product.inStock,
+              categorySlug: item.product.category.slug,
+            }
+          : null,
+      })),
+  }));
 }

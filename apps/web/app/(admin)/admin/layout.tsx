@@ -16,6 +16,7 @@ const adminNavigation = [
   { href: "/admin/service-pricing", label: "Прайс сервиса", marketing: false },
   { href: "/admin/telegram-posts", label: "Telegram посты", marketing: false },
   { href: "/admin/marketing", label: "📊 Маркетинг", marketing: true },
+  { href: "/admin/marketing/homepage", label: "🏠 Главная страница", marketing: true },
   { href: "/admin/settings", label: "Настройки", marketing: false },
 ];
 

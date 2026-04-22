@@ -12,8 +12,10 @@ import {
 function makeNode(overrides: Partial<CategoryTreeNode> & { id: string; slug: string; name: string }): CategoryTreeNode {
   return {
     parentId: null,
+    imageUrl: null,
     seoTitle: null,
     seoDescription: null,
+    seoKeywords: [],
     productCount: 0,
     childCount: 0,
     children: [],
@@ -101,7 +103,7 @@ describe("getAllCategorySlugs", () => {
 describe("buildFlatCategoryOptions", () => {
   it("builds flat options with tree paths", () => {
     const opts = buildFlatCategoryOptions(sampleTree);
-    expect(opts[0]).toEqual({ id: "1", label: "Apple", isLeaf: false });
+    expect(opts[0]).toEqual({ id: "1", slug: "apple", label: "Apple", isLeaf: false });
     const iphoneOpt = opts.find((o) => o.id === "1a");
     expect(iphoneOpt?.label).toBe("Apple / iPhone");
     expect(iphoneOpt?.isLeaf).toBe(false);

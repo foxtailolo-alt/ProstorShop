@@ -1,19 +1,34 @@
 import { prisma } from "@prostor/db";
-import { listCatalogCategories, listCatalogProducts } from "../../../../lib/data/catalog";
+import { buildFlatCategoryOptions, listCatalogProducts, loadCategoryTree } from "../../../../lib/data/catalog";
 import { deleteBannerAction, toggleBannerActiveAction, upsertBannerAction } from "./actions";
 import { ConfirmButton } from "../../../../components/admin/confirm-button";
 
+type BannerPlacementRecord = {
+  id: string;
+  title: string | null;
+  imageUrl: string;
+  linkUrl: string;
+  categorySlug: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export default async function AdminBannersPage() {
-  const [banners, categories, products] = await Promise.all([
-    prisma.banner.findMany({ orderBy: { sortOrder: "asc" } }),
-    listCatalogCategories(),
+  const [banners, categoryTree, products] = await Promise.all([
+    prisma.banner.findMany({ orderBy: [{ categorySlug: "asc" }, { sortOrder: "asc" }] }) as Promise<BannerPlacementRecord[]>,
+    loadCategoryTree(),
     listCatalogProducts(),
   ]);
 
-  const activeBannerCount = banners.filter((b) => b.isActive).length;
+  const categoryOptions = buildFlatCategoryOptions(categoryTree);
+  const categoryLabelBySlug = new Map(categoryOptions.map((option) => [option.slug, option.label]));
+  const homeActiveBannerCount = banners.filter((banner) => banner.isActive && !banner.categorySlug).length;
+  const categoryActiveBannerCount = banners.filter((banner) => banner.isActive && banner.categorySlug).length;
 
   const linkOptions = [
-    ...categories.map((c) => ({ label: `Категория: ${c.name}`, value: `/catalog/${c.slug}` })),
+    ...categoryOptions.map((c) => ({ label: `Категория: ${c.label}`, value: `/catalog/${c.slug}` })),
     ...products.map((p) => ({ label: `${p.brand} ${p.name}`, value: `/catalog/${p.categorySlug}/${p.slug}` })),
   ];
 
@@ -22,7 +37,7 @@ export default async function AdminBannersPage() {
       <div>
         <h1 style={{ margin: "0 0 4px", fontSize: 28, fontWeight: 700 }}>Баннеры</h1>
         <p style={{ margin: 0, color: "var(--text-secondary)" }}>
-          Карусель на главной странице. Активных: {activeBannerCount}/5
+          Баннеры для главной, категорий и подкатегорий. Главная: {homeActiveBannerCount}/5 · Категории: {categoryActiveBannerCount} активных
         </p>
       </div>
 
@@ -35,6 +50,22 @@ export default async function AdminBannersPage() {
             <div className="field">
               <span>Заголовок (необязательно)</span>
               <input type="text" name="title" placeholder="Скидки на iPhone" />
+            </div>
+            <div className="field">
+              <span>Размещение</span>
+              <select name="placement" defaultValue="home">
+                <option value="home">Главная страница</option>
+                <option value="category">Категория или подкатегория</option>
+              </select>
+            </div>
+            <div className="field">
+              <span>Категория показа</span>
+              <select name="categorySlug" defaultValue="">
+                <option value="">Только для главной</option>
+                {categoryOptions.map((opt) => (
+                  <option key={opt.id} value={opt.slug}>{opt.label}</option>
+                ))}
+              </select>
             </div>
             <div className="field">
               <span>Ссылка</span>
@@ -87,6 +118,9 @@ export default async function AdminBannersPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <strong style={{ fontSize: 15 }}>{banner.title || "Без заголовка"}</strong>
                 <span style={{ fontSize: 13, color: "var(--muted)" }}>→ {banner.linkUrl}</span>
+                <span style={{ fontSize: 13, color: "var(--muted)" }}>
+                  Показ: {banner.categorySlug ? `категория ${categoryLabelBySlug.get(banner.categorySlug) ?? banner.categorySlug}` : "главная страница"}
+                </span>
                 <span style={{ fontSize: 12, color: "var(--muted)" }}>
                   Порядок: {banner.sortOrder} · {banner.isActive ? "✅ Активен" : "⏸ Неактивен"}
                 </span>

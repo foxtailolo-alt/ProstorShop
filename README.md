@@ -133,8 +133,12 @@ infra/
 - Product media: gallery model with up to 10 images, admin image gallery manager with reorder/delete, storefront lightbox gallery.
 - Product card media: cursor-position-based image switching on hover (left→right = first→last photo).
 - Product recommendations: schema, admin picker, storefront display section.
-- Banner carousel: admin CRUD (up to 5 active), storefront auto-rotating slider with swipe support. Recommended banner size: 2100×900px (21:9).
+- Banner carousel: admin CRUD (up to 5 active), storefront auto-rotating slider with swipe support. Recommended banner size: 2100×900px (21:9). Banners support `categorySlug` for linking to category pages.
 - **Hierarchical category management** — full tree UI in admin with expand/collapse, parent/leaf logic on storefront, breadcrumbs on product pages, leaf-only product assignment. Auto-slug with cyrillic transliteration.
+- **Homepage redesign** — dynamic admin-managed sections via `HomepageSection`/`HomepageItem` models. Admin UI at `/admin/marketing/homepage`. Section types: bestsellers grid, category grid (with hover subcategories, Apple/Samsung span 2 cols), 3D coverflow carousel (perspective + drag/swipe + autoplay).
+- **Product import** — 347 products and 96 hierarchical categories imported from `offers.xlsx` with CDN image URLs.
+- **Admin image tools** — per-image crop (div-overlay UI, server-side sharp crop) and background removal (corner-sampling + tolerance-based transparency via sharp). No external dependencies beyond `sharp`.
+- `Category.imageUrl` field for category grid display.
 - `seoKeywords` field on Category model, rendered as `<meta name="keywords">` on category pages.
 - Trade-in and service request flows writing to the database.
 - Telegram bot deep links now open the Mini App directly, support `startapp` product context, and configure the menu button.
@@ -149,55 +153,51 @@ infra/
 
 ### Remaining Work
 
+- **Deploy latest to VPS** — homepage redesign, image tools, and 347 products need `corepack pnpm deploy:pack` + deploy + `db push` on production.
+- **Populate homepage sections** — use admin UI at `/admin/marketing/homepage` to create bestsellers, category grid, coverflow sections with real product data.
 - Run a full post-deploy smoke check for the live stack: `/login`, `/profile`, cart promo flow, referral promo flow, Telegram post deep links, and Mini App launch from bot.
+- Fix product options cart/order flow — extend CartItem type & OrderItem model to include `variantLabel`.
 - Apply and document the Prisma migration path for production instead of relying only on `db push` as the schema continues to grow.
 - Finish production setup for Telegram posting and verify the target channel/group permissions with the current bot token.
-- Add a tracked, non-secret example for the AI proxy env and document the proxy service start/restart flow.
-- Test phone auth flow end-to-end on production (register, login, profile display, logout).
-- Consider bcrypt or argon2 for password hashing (currently SHA-256) before launching phone auth publicly.
-- Add AI SEO generation for products (currently only categories have it)
-### Remaining Work
-
-- Run a full post-deploy smoke check for the live stack: `/login`, `/profile`, cart promo flow, referral promo flow, Telegram post deep links, and Mini App launch from bot.
-- Apply and document the Prisma migration path for production instead of relying only on `db push` as the schema continues to grow.
-- Finish production setup for Telegram posting and verify the target channel/group permissions with the current bot token.
-- Add a tracked, non-secret example for the AI proxy env and document the proxy service start/restart flow.
 - Test phone auth flow end-to-end on production (register, login, profile display, logout).
 - Consider bcrypt or argon2 for password hashing (currently SHA-256) before launching phone auth publicly.
 - Add AI SEO generation for products (currently only categories have it).
 
-## Next Session Handoff
+## Next Session Handoff (Updated 2026-04-22)
 
 ### Verified Context
 
 - Root business model is now a real store, not a static showcase.
-- Database is PostgreSQL on Neon, Prisma schema is already pushed, and seed data exists.
+- Database is PostgreSQL on Neon, Prisma schema is already pushed. **347 products and 96 categories** imported from `offers.xlsx` with CDN image URLs (`https://cdn.ibotby.ru/...`).
 - `Product.imageUrls` is the active gallery field; first image is treated as primary image.
 - `Product.specs Json?` stores key-value characteristics filled via AI or manually.
 - `Product.options Json?` stores option groups with variant/additive pricing model.
-- `Banner` model with admin CRUD and storefront carousel already implemented.
+- `Banner` model with admin CRUD and storefront carousel. `categorySlug` field links banner clicks to category pages.
+- **HomepageSection/HomepageItem** models for admin-managed homepage. Admin UI at `/admin/marketing/homepage`. Tables exist but are currently empty — need admin setup.
+- **Image tools**: `cropProductImageAction` (div-overlay UI sends pixel coords → server-side sharp crop) and `removeImageBackgroundAction` (corner-sampling + tolerance transparency). Both in `apps/web/app/(admin)/admin/products/actions.ts`.
+- **sharp 0.34.5** installed as devDependency in `@prostor/web` for server-side image processing.
 - Orders now persist `variantLabel`, `appliedPromoCodeId`, `promoRewardDescription`, and `cashbackPointsAwarded`.
 - `User` now stores `phone` and `loyaltyPoints`; referral promo creation happens automatically on Telegram login.
+- Test admin user: phone `+79991394133`, role `admin`.
 - Promo cookie handling lives in `apps/web/lib/promo.ts` and must stay signed with `AUTH_SESSION_SECRET`.
 - Mini App product deep links are centralized in `packages/core/src/telegram.ts` and reused by bot/web code.
 - Production public URLs must come from `/home/deploy/ProstorShop/.env`; `apps/web/.env.local` must not exist on the VPS.
 - `scripts/assert-public-env.mjs` blocks unsafe production builds, and `scripts/build-deploy-archive.mjs` creates the safe release tarball.
 - The live site already serves the correct login domain `https://88-218-64-61.sslip.io`.
-- The VPS cleanup was done: `/home/deploy/ProstorShop/apps/web/.env.local` was removed.
-- The latest repo revision is deployed to the VPS, including `build:prod` guard scripts and the admin product UX fixes.
-- Local admin login exists only for localhost development and must not be exposed in production flows.
 - Uploaded media must use `UPLOADS_DIR` on production; current VPS value is `/home/deploy/prostor-uploads` and nginx serves `/uploads/*` from the same location.
 - AI specs endpoint uses Responses API (`/v1/responses`) with `web_search_preview` tool for factual data.
 - `infra/ai-proxy/server.py` supports configurable upstream URLs; its real `proxy.env` must stay outside git.
-- Root SSH access on the main VPS now accepts the local key `~/.ssh/prostor_tradein_bot_ed25519_nopass`, so future deploys no longer require a password prompt.
+- Root SSH access on the main VPS accepts `~/.ssh/prostor_tradein_bot_ed25519_nopass` for passwordless deploys.
+- **Important**: Image crop modal uses div-overlays, NOT canvas (canvas `crossOrigin="anonymous"` fails on CDN without CORS headers). Crop coordinates are sent to server where sharp does the actual extraction.
 
 ### Next Recommended Steps
 
-1. Run a full manual production smoke test for login, profile, cart with variants, promo application, cashback accrual, Telegram Mini App entry, and the updated admin product image flow.
-2. Replace the real proxy env file with a committed example file and document service management for `infra/ai-proxy`.
-3. Add one more test pass for promo/referral flows, admin order completion, and the admin product image UX.
-4. Convert the evolving schema changes into proper Prisma migrations before the next structural database update.
-5. Verify Telegram posting end-to-end with the current bot token and target channel permissions.
+1. **Deploy to VPS**: `corepack pnpm deploy:pack` → scp → extract → `db push` → restart. Latest code (homepage, image tools, 347 products) is NOT yet on production.
+2. **Populate homepage sections**: Use `/admin/marketing/homepage` to create bestsellers, category grid, and coverflow sections.
+3. Run a full manual production smoke test for login, profile, cart, promo, Telegram Mini App, and image tools.
+4. Fix product options cart/order flow — variants lost on add-to-cart.
+5. Convert schema changes into proper Prisma migrations before next structural update.
+6. Verify Telegram posting end-to-end with the current bot token and target channel permissions.
 
 ## Build Order
 

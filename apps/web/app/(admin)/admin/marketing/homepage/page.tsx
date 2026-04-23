@@ -2,7 +2,9 @@ import { prisma } from "@prostor/db";
 import { redirect } from "next/navigation";
 import { isMarketingMode } from "../../../../../lib/auth/marketing";
 import { loadCategoryTree, buildFlatCategoryOptions } from "../../../../../lib/data/catalog";
+import { CategoryImageCard } from "../../../../../components/admin/category-image-card";
 import { ConfirmButton } from "../../../../../components/admin/confirm-button";
+import { SearchableProductPicker } from "../../../../../components/admin/searchable-product-picker";
 import {
   upsertSectionAction,
   deleteSectionAction,
@@ -190,18 +192,19 @@ export default async function AdminHomepagePage() {
             </div>
 
             {/* Добавить товар */}
-            <form action={addItemToSectionAction} style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "end" }}>
+            <form action={addItemToSectionAction} style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "end", position: "relative", zIndex: 4 }}>
               <input type="hidden" name="sectionId" value={section.id} />
               <div className="admin-modal-field" style={{ flex: 1 }}>
                 <span>Добавить товар</span>
-                <select name="productId" required>
-                  <option value="">Выберите товар...</option>
-                  {availableProducts.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} — {Number(p.price).toLocaleString("ru-RU")} ₽
-                    </option>
-                  ))}
-                </select>
+                <SearchableProductPicker
+                  name="productId"
+                  products={availableProducts.map((product) => ({
+                    id: product.id,
+                    name: product.name,
+                    brand: product.brand,
+                    price: Number(product.price),
+                  }))}
+                />
               </div>
               <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13, whiteSpace: "nowrap" }}>
                 <input type="checkbox" name="isHighlighted" />
@@ -223,23 +226,13 @@ export default async function AdminHomepagePage() {
           {categoryOptions.map((cat) => {
             const treeNode = findCategoryInTree(categoryTree, cat.id);
             return (
-              <div key={cat.id} className="card glass-strong" style={{ padding: 14 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{cat.label}</div>
-                {treeNode?.imageUrl ? (
-                  <div style={{ marginBottom: 8, borderRadius: "var(--radius-md)", overflow: "hidden", aspectRatio: "16/10", background: "#f0f0f0" }}>
-                    <img src={treeNode.imageUrl} alt={cat.label} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  </div>
-                ) : (
-                  <div style={{ marginBottom: 8, aspectRatio: "16/10", background: "var(--surface)", borderRadius: "var(--radius-md)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: 12 }}>
-                    Нет изображения
-                  </div>
-                )}
-                <form action={updateCategoryImageAction} encType="multipart/form-data" style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input type="hidden" name="categoryId" value={cat.id} />
-                  <input type="file" name="image" accept="image/jpeg,image/png,image/webp" style={{ fontSize: 11, flex: 1, minWidth: 0 }} />
-                  <button className="button button-primary button-sm" type="submit">💾</button>
-                </form>
-              </div>
+              <CategoryImageCard
+                key={cat.id}
+                categoryId={cat.id}
+                label={cat.label}
+                imageUrl={treeNode?.imageUrl ?? null}
+                action={updateCategoryImageAction}
+              />
             );
           })}
         </div>

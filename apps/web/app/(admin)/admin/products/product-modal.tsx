@@ -267,6 +267,16 @@ export function ProductModal({
     setImageError(null);
   }
 
+  function handlePendingUploadReplace(index: number, file: File, previewUrl: string) {
+    replacePendingUploads(
+      pendingUploads.map((upload, currentIndex) => (
+        currentIndex === index
+          ? { ...upload, file, previewUrl }
+          : upload
+      )),
+    );
+  }
+
   async function fillWithAI() {
     const form = dialogRef.current?.querySelector("form");
     if (!form) return;
@@ -516,6 +526,7 @@ export function ProductModal({
                 productName={product?.name ?? "Новое фото"}
                 onChange={handlePendingUploadsChange}
                 onDeleteImage={handlePendingUploadDelete}
+                onReplaceImage={handlePendingUploadReplace}
                 persistChanges={false}
               />
             </div>

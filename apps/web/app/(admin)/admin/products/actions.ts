@@ -449,63 +449,6 @@ export async function replaceProductImageAction(formData: FormData) {
   return { newUrl };
 }
 
-export async function cropProductImageAction(formData: FormData) {
-  await requirePermission("products", "write");
-  const sku = String(formData.get("sku") ?? "").trim();
-  const imageUrl = String(formData.get("imageUrl") ?? "").trim();
-  const cx = Number(formData.get("cx"));
-  const cy = Number(formData.get("cy"));
-  const cw = Number(formData.get("cw"));
-  const ch = Number(formData.get("ch"));
-
-  if (!sku || !imageUrl || !cw || !ch) {
-    throw new Error("Invalid crop request.");
-  }
-
-  const product = await prisma.product.findUnique({ where: { sku } });
-  if (!product) throw new Error("Product not found.");
-
-  // Fetch the image
-  let inputBuffer: Buffer;
-  if (imageUrl.startsWith("http")) {
-    const resp = await fetch(imageUrl);
-    if (!resp.ok) throw new Error("Failed to fetch image.");
-    inputBuffer = Buffer.from(await resp.arrayBuffer());
-  } else {
-    const fs = await import("node:fs/promises");
-    const pathMod = await import("node:path");
-    const root = process.env.UPLOADS_DIR?.trim()
-      || (process.env.NODE_ENV === "production" ? "/home/deploy/prostor-uploads" : pathMod.join(process.cwd(), "public", "uploads"));
-    const relPath = imageUrl.replace(/^\/uploads\//, "");
-    inputBuffer = await fs.readFile(pathMod.join(root, relPath));
-  }
-
-  const sharp = (await import("sharp")).default;
-  const croppedBuffer = await sharp(inputBuffer)
-    .extract({ left: cx, top: cy, width: cw, height: ch })
-    .webp({ quality: 92 })
-    .toBuffer();
-
-  const file = new File([new Uint8Array(croppedBuffer)], "cropped.webp", { type: "image/webp" });
-  const newUrl = await saveProductImage(file, product.slug);
-  if (!newUrl) throw new Error("Failed to save cropped image.");
-
-  const urls = product.imageUrls ?? [];
-  const updatedUrls = urls.map((url) => (url === imageUrl ? newUrl : url));
-
-  await prisma.product.update({
-    where: { id: product.id },
-    data: {
-      imageUrls: updatedUrls,
-      imageUrl: updatedUrls[0] ?? null,
-    },
-  });
-
-  revalidatePath("/admin/products");
-  revalidatePath("/catalog");
-  return { newUrl };
-}
-
 export async function removeImageBackgroundAction(formData: FormData) {
   await requirePermission("products", "write");
   const sku = String(formData.get("sku") ?? "").trim();
@@ -582,21 +525,13 @@ export async function removeImageBackgroundAction(formData: FormData) {
     }
   }
 
-  // Save as PNG
   const resultBuffer = await sharp(Buffer.from(pixels.buffer), {
     raw: { width: info.width, height: info.height, channels: 4 },
   }).png().toBuffer();
 
-  const { randomUUID } = await import("node:crypto");
-  const fsMod = await import("node:fs/promises");
-  const pathMod = await import("node:path");
-  const root = process.env.UPLOADS_DIR?.trim()
-    || (process.env.NODE_ENV === "production" ? "/home/deploy/prostor-uploads" : pathMod.join(process.cwd(), "public", "uploads"));
-  const uploadDir = pathMod.join(root, "products");
-  await fsMod.mkdir(uploadDir, { recursive: true });
-  const fileName = `${product.slug}-nobg-${randomUUID()}.png`;
-  await fsMod.writeFile(pathMod.join(uploadDir, fileName), resultBuffer);
-  const newUrl = `/uploads/products/${fileName}`;
+  const file = new File([new Uint8Array(resultBuffer)], `${product.slug}-nobg.png`, { type: "image/png" });
+  const newUrl = await saveProductImage(file, product.slug);
+  if (!newUrl) throw new Error("Failed to save background-removed image.");
 
   const urls = product.imageUrls ?? [];
   const updatedUrls = urls.map((url) => (url === imageUrl ? newUrl : url));

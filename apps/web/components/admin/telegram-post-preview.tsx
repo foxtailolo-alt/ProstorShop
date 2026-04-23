@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  appendTelegramStoreFooter,
+  buildTelegramPostText,
+} from "../../lib/telegram-post-template";
 
 type Product = {
   slug: string;
@@ -25,6 +29,16 @@ export function TelegramPostForm({ products, publishAction }: TelegramPostFormPr
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const selected = products.find((p) => p.slug === selectedSlug);
+  const priceText = selected ? `${Number(selected.price).toLocaleString("ru-RU")} ₽` : "";
+  const previewText = buildTelegramPostText({ title, description, priceText });
+
+  const handleAppendStoreFooter = () => {
+    if (!priceText) {
+      return;
+    }
+
+    setDescription((currentValue) => appendTelegramStoreFooter(currentValue, priceText));
+  };
 
   return (
     <div className="grid grid-2" style={{ gap: 18, marginTop: 18 }}>
@@ -54,9 +68,12 @@ export function TelegramPostForm({ products, publishAction }: TelegramPostFormPr
               setIsSubmitting(false);
             }
           }}
-          className="form-grid"
+          style={{ width: "100%", display: "block" }}
         >
-          <fieldset disabled={isSubmitting} style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: 12 }}>
+          <fieldset
+            disabled={isSubmitting}
+            style={{ border: 0, padding: 0, margin: 0, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12, width: "100%" }}
+          >
             <label className="field field-wide">
               <span>Товар</span>
               <select
@@ -87,13 +104,21 @@ export function TelegramPostForm({ products, publishAction }: TelegramPostFormPr
               <span>Описание</span>
               <textarea
                 name="description"
-                rows={5}
+                rows={9}
                 placeholder="Коротко и по делу: что это за товар, почему он интересен."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 required
               />
             </label>
+            <div className="actions field-wide">
+              <button className="button button-secondary button-sm" type="button" onClick={handleAppendStoreFooter}>
+                Добавить шаблон магазина
+              </button>
+              <span className="muted" style={{ fontSize: 13 }}>
+                Подставит цену, адрес, график и контакты в описание. Повторно блок не дублируется.
+              </span>
+            </div>
             <label className="field">
               <span>Текст кнопки</span>
               <input
@@ -116,8 +141,8 @@ export function TelegramPostForm({ products, publishAction }: TelegramPostFormPr
                 {feedback.message}
               </div>
             ) : null}
-            <div className="actions field-wide">
-              <button className="button button-primary" type="submit" disabled={isSubmitting}>
+            <div className="actions field-wide" style={{ width: "100%" }}>
+              <button className="button button-primary" type="submit" disabled={isSubmitting} style={{ width: "100%", justifyContent: "center" }}>
                 {isSubmitting ? "Публикуем..." : "Опубликовать в Telegram"}
               </button>
             </div>
@@ -138,15 +163,11 @@ export function TelegramPostForm({ products, publishAction }: TelegramPostFormPr
         )}
         {title || description ? (
           <div style={{ whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.5 }}>
-            {title && <strong>{title}</strong>}
-            {title && description && <><br /><br /></>}
-            {description}
-            {selected && (
-              <>
-                <br /><br />
-                💰 {Number(selected.price).toLocaleString("ru-RU")} ₽
-              </>
-            )}
+            {previewText.split("\n").map((line, index) => (
+              <div key={`${line}-${index}`} style={{ marginBottom: line ? 0 : 14 }}>
+                {index === 0 && title ? <strong>{line}</strong> : line || <span>&nbsp;</span>}
+              </div>
+            ))}
           </div>
         ) : (
           <p className="muted">Заполните форму, чтобы увидеть предпросмотр.</p>

@@ -40,9 +40,6 @@ export function BestsellersSection({ title, items, addToCartAction }: Props) {
                   <span className="product-card-old-price">{highlighted.product.compareAtPrice.toLocaleString("ru-RU")} ₽</span>
                 ) : null}
               </div>
-              <div className="product-card-stock">
-                {highlighted.product.inStock ? "✓ В наличии" : "Под заказ"}
-              </div>
               <form action={addToCartAction} className="product-card-actions">
                 <input type="hidden" name="productSlug" value={highlighted.product.slug} />
                 <input type="hidden" name="quantity" value="1" />
@@ -76,9 +73,6 @@ export function BestsellersSection({ title, items, addToCartAction }: Props) {
                     {p.compareAtPrice ? (
                       <span className="product-card-old-price">{p.compareAtPrice.toLocaleString("ru-RU")} ₽</span>
                     ) : null}
-                  </div>
-                  <div className="product-card-stock">
-                    {p.inStock ? "✓ В наличии" : "Под заказ"}
                   </div>
                   <form action={addToCartAction} className="product-card-actions">
                     <input type="hidden" name="productSlug" value={p.slug} />

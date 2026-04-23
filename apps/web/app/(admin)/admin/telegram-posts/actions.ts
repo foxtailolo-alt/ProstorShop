@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@prostor/db";
 import { logAdminActivity } from "../../../../lib/audit";
 import { requirePermission } from "../../../../lib/auth/session";
+import { buildTelegramPostText } from "../../../../lib/telegram-post-template";
 import { buildMiniAppProductUrl, sendTelegramPost } from "../../../../lib/telegram";
 
 export async function publishTelegramPostAction(formData: FormData) {
@@ -24,7 +25,8 @@ export async function publishTelegramPostAction(formData: FormData) {
   }
 
   const buttonUrl = buildMiniAppProductUrl(product.slug);
-  const text = [`<b>${title}</b>`, description, `Цена: <b>${Number(product.price).toLocaleString("ru-RU")} ₽</b>`].join("\n\n");
+  const priceText = `${Number(product.price).toLocaleString("ru-RU")} ₽`;
+  const text = buildTelegramPostText({ title, description, priceText });
 
   try {
     await sendTelegramPost({ text, buttonText: ctaText, buttonUrl, imageUrl: product.imageUrl });

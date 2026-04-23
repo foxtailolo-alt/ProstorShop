@@ -11,6 +11,7 @@ const allowedMimeTypes = new Map([
 
 const maxFileSize = 5 * 1024 * 1024;
 const maxProductImageCount = 10;
+const squareImageSize = 1400;
 
 const defaultExternalUploadRoot = "/home/deploy/prostor-uploads";
 
@@ -43,6 +44,22 @@ function resolveUploadDir(kind: "products" | "banners" | "categories") {
   return path.join(resolveUploadRoot(), kind);
 }
 
+async function normalizeSquareImage(file: File) {
+  const sharp = (await import("sharp")).default;
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  return await sharp(buffer)
+    .rotate()
+    .resize({
+      width: squareImageSize,
+      height: squareImageSize,
+      fit: "contain",
+      background: { r: 255, g: 255, b: 255, alpha: 0 },
+    })
+    .webp({ quality: 92 })
+    .toBuffer();
+}
+
 export async function saveProductImage(file: File, productSlug: string) {
   if (!file || file.size === 0) {
     return null;
@@ -58,10 +75,10 @@ export async function saveProductImage(file: File, productSlug: string) {
     throw new Error("Image must be 5 MB or smaller.");
   }
 
-  const fileName = `${sanitizeBaseName(productSlug) || "product"}-${randomUUID()}${extension}`;
+  const fileName = `${sanitizeBaseName(productSlug) || "product"}-${randomUUID()}.webp`;
   const uploadDir = resolveUploadDir("products");
   const targetPath = path.join(uploadDir, fileName);
-  const buffer = Buffer.from(await file.arrayBuffer());
+  const buffer = await normalizeSquareImage(file);
 
   await mkdir(uploadDir, { recursive: true });
   await writeFile(targetPath, buffer);
@@ -124,10 +141,10 @@ export async function saveCategoryImage(file: File, categorySlug: string) {
     throw new Error("Image must be 5 MB or smaller.");
   }
 
-  const fileName = `${sanitizeBaseName(categorySlug) || "category"}-${randomUUID()}${extension}`;
+  const fileName = `${sanitizeBaseName(categorySlug) || "category"}-${randomUUID()}.webp`;
   const uploadDir = resolveUploadDir("categories");
   const targetPath = path.join(uploadDir, fileName);
-  const buffer = Buffer.from(await file.arrayBuffer());
+  const buffer = await normalizeSquareImage(file);
 
   await mkdir(uploadDir, { recursive: true });
   await writeFile(targetPath, buffer);

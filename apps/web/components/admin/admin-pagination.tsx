@@ -30,14 +30,22 @@ type AdminPaginationProps = {
   currentPage: number;
   totalPages: number;
   searchQuery?: string;
+  extraParams?: Record<string, string | null | undefined>;
 };
 
-export function AdminPagination({ basePath, currentPage, totalPages, searchQuery }: AdminPaginationProps) {
+export function AdminPagination({ basePath, currentPage, totalPages, searchQuery, extraParams }: AdminPaginationProps) {
   if (totalPages <= 1) return null;
 
   function buildHref(page: number) {
     const params = new URLSearchParams();
     if (searchQuery) params.set("q", searchQuery);
+    if (extraParams) {
+      for (const [key, value] of Object.entries(extraParams)) {
+        if (value) {
+          params.set(key, value);
+        }
+      }
+    }
     if (page > 1) params.set("page", String(page));
     const qs = params.toString();
     return (qs ? `${basePath}?${qs}` : basePath) as "/";

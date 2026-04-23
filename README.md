@@ -137,12 +137,17 @@ infra/
 - **Hierarchical category management** — full tree UI in admin with expand/collapse, parent/leaf logic on storefront, breadcrumbs on product pages, leaf-only product assignment. Auto-slug with cyrillic transliteration.
 - **Homepage redesign** — dynamic admin-managed sections via `HomepageSection`/`HomepageItem` models. Admin UI at `/admin/marketing/homepage`. Section types: bestsellers grid, category grid (with hover subcategories, Apple/Samsung span 2 cols), 3D coverflow carousel (perspective + drag/swipe + autoplay).
 - **Product import** — 347 products and 96 hierarchical categories imported from `offers.xlsx` with CDN image URLs.
-- **Admin image tools** — per-image crop (div-overlay UI, server-side sharp crop) and background removal (corner-sampling + tolerance-based transparency via sharp). No external dependencies beyond `sharp`.
+- **Square media workflow** — product and category uploads are normalized to square `1400x1400` WebP via `sharp`. Admin image editing now uses a square zoom editor with drag, zoom-out, center snapping, and visual guides instead of crop.
+- **Draft-safe admin image editing** — pending product uploads keep background removal and square edits local until the operator presses save; cancel no longer persists image changes.
+- **Homepage admin UX polish** — searchable product picker for homepage sections uses a portal dropdown and works correctly above layered glass sections. Category images now use a dedicated square editor card.
+- **Admin product catalog redesign** — `/admin/products` now has server-side category and status filters, preserved pagination params, richer horizontal cards, and category path labels.
+- **Telegram post templates** — publishing and preview use a shared plain-text template builder with optional store footer injection. Premium/custom emoji HTML mode was removed.
 - `Category.imageUrl` field for category grid display.
 - `seoKeywords` field on Category model, rendered as `<meta name="keywords">` on category pages.
 - Trade-in and service request flows writing to the database.
 - Telegram bot deep links now open the Mini App directly, support `startapp` product context, and configure the menu button.
 - Telegram post publishing now returns operator-friendly errors instead of failing silently.
+- **Storefront visual polish** — bestsellers cards and coverflow cards use unified white card backgrounds; coverflow keeps the 3D look, loops seamlessly, and no longer fades non-active cards.
 - Backup login flow for the owner via `/api/auth/bootstrap-login` guarded by `AUTH_BOOTSTRAP_SECRET`.
 - Attribution middleware and Yandex Metrica integration groundwork.
 - Basic SEO foundation: metadata, sitemap, robots, canonical URLs.
@@ -153,9 +158,9 @@ infra/
 
 ### Remaining Work
 
-- **Deploy latest to VPS** — homepage redesign, image tools, and 347 products need `corepack pnpm deploy:pack` + deploy + `db push` on production.
-- **Populate homepage sections** — use admin UI at `/admin/marketing/homepage` to create bestsellers, category grid, coverflow sections with real product data.
-- Run a full post-deploy smoke check for the live stack: `/login`, `/profile`, cart promo flow, referral promo flow, Telegram post deep links, and Mini App launch from bot.
+- **Deploy latest to VPS** — square image workflow, homepage admin polish, admin product catalog redesign, Telegram post template updates, and storefront coverflow/bestsellers tweaks are not yet documented as deployed.
+- **Populate homepage sections** — use admin UI at `/admin/marketing/homepage` to create bestsellers, category grid, and coverflow sections with real product data.
+- Run a full post-deploy smoke check for the live stack: `/login`, `/profile`, cart promo flow, referral promo flow, homepage section management, Telegram post publishing, and Mini App launch from bot.
 - Fix product options cart/order flow — extend CartItem type & OrderItem model to include `variantLabel`.
 - Apply and document the Prisma migration path for production instead of relying only on `db push` as the schema continues to grow.
 - Finish production setup for Telegram posting and verify the target channel/group permissions with the current bot token.
@@ -163,7 +168,7 @@ infra/
 - Consider bcrypt or argon2 for password hashing (currently SHA-256) before launching phone auth publicly.
 - Add AI SEO generation for products (currently only categories have it).
 
-## Next Session Handoff (Updated 2026-04-22)
+## Next Session Handoff (Updated 2026-04-23)
 
 ### Verified Context
 
@@ -173,8 +178,9 @@ infra/
 - `Product.specs Json?` stores key-value characteristics filled via AI or manually.
 - `Product.options Json?` stores option groups with variant/additive pricing model.
 - `Banner` model with admin CRUD and storefront carousel. `categorySlug` field links banner clicks to category pages.
-- **HomepageSection/HomepageItem** models for admin-managed homepage. Admin UI at `/admin/marketing/homepage`. Tables exist but are currently empty — need admin setup.
-- **Image tools**: `cropProductImageAction` (div-overlay UI sends pixel coords → server-side sharp crop) and `removeImageBackgroundAction` (corner-sampling + tolerance transparency). Both in `apps/web/app/(admin)/admin/products/actions.ts`.
+- **HomepageSection/HomepageItem** models for admin-managed homepage. Admin UI at `/admin/marketing/homepage`. Tables exist; section management now includes searchable product selection and square category image editing.
+- **Image workflow**: product and category images are normalized through `saveProductImage` / `saveCategoryImage` to square `1400x1400` WebP. The current admin editor is `SquareImageEditorModal` with zoom, drag, center snapping, and percent readout.
+- Pending product uploads respect `persistChanges={false}` for both square editing and background removal; changes stay local until the product form is saved.
 - **sharp 0.34.5** installed as devDependency in `@prostor/web` for server-side image processing.
 - Orders now persist `variantLabel`, `appliedPromoCodeId`, `promoRewardDescription`, and `cashbackPointsAwarded`.
 - `User` now stores `phone` and `loyaltyPoints`; referral promo creation happens automatically on Telegram login.
@@ -188,13 +194,16 @@ infra/
 - AI specs endpoint uses Responses API (`/v1/responses`) with `web_search_preview` tool for factual data.
 - `infra/ai-proxy/server.py` supports configurable upstream URLs; its real `proxy.env` must stay outside git.
 - Root SSH access on the main VPS accepts `~/.ssh/prostor_tradein_bot_ed25519_nopass` for passwordless deploys.
-- **Important**: Image crop modal uses div-overlays, NOT canvas (canvas `crossOrigin="anonymous"` fails on CDN without CORS headers). Crop coordinates are sent to server where sharp does the actual extraction.
+- Telegram post publishing is plain-text now; shared formatting lives in `apps/web/lib/telegram-post-template.ts`. Premium/custom emoji HTML formatting was intentionally removed.
+- `/admin/products` now supports server-side `category` and `status` filters with pagination preserving active params.
+- Storefront coverflow uses a seamless loop with duplicated slides to avoid visible edge-jumps; non-active cards remain opaque and cards use solid white backgrounds.
+- Bestsellers cards now also use solid white backgrounds and a more compact layout without stock text.
 
 ### Next Recommended Steps
 
-1. **Deploy to VPS**: `corepack pnpm deploy:pack` → scp → extract → `db push` → restart. Latest code (homepage, image tools, 347 products) is NOT yet on production.
+1. **Deploy to VPS**: `corepack pnpm deploy:pack` → scp → extract → `db push` → restart. Latest code includes square media workflow, homepage admin polish, admin product filters, Telegram post template helpers, and coverflow/bestsellers visual changes.
 2. **Populate homepage sections**: Use `/admin/marketing/homepage` to create bestsellers, category grid, and coverflow sections.
-3. Run a full manual production smoke test for login, profile, cart, promo, Telegram Mini App, and image tools.
+3. Run a full manual production smoke test for login, profile, cart, promo, homepage admin flows, Telegram posting, and Mini App launch.
 4. Fix product options cart/order flow — variants lost on add-to-cart.
 5. Convert schema changes into proper Prisma migrations before next structural update.
 6. Verify Telegram posting end-to-end with the current bot token and target channel permissions.

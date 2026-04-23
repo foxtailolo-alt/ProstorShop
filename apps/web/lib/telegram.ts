@@ -59,13 +59,11 @@ export async function sendTelegramPost(input: {
         chat_id: chatId,
         photo: input.imageUrl,
         caption: input.text,
-        parse_mode: "HTML",
         reply_markup: replyMarkup,
       }
     : {
         chat_id: chatId,
         text: input.text,
-        parse_mode: "HTML",
         reply_markup: replyMarkup,
         disable_web_page_preview: false,
       };

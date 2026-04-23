@@ -36,6 +36,7 @@ type ProductRecord = {
   specs: Record<string, string>;
   options: import("./product-options-editor").ProductOptionsData;
   category: { slug: string; name: string };
+  categoryPath: string;
   recommendedIds: string[];
 };
 
@@ -43,6 +44,11 @@ type Props = {
   products: ProductRecord[];
   categories: CategoryNode[];
   allProductOptions: ProductOption[];
+  categoryFilterOptions: Array<{ slug: string; label: string }>;
+  totalCount: number;
+  searchQuery: string;
+  selectedCategorySlug: string;
+  selectedStatus: string;
   editSku: string | null;
   saveMessage: string | null;
   upsertAction: (
@@ -57,6 +63,11 @@ export function ProductsGrid({
   products,
   categories,
   allProductOptions,
+  categoryFilterOptions,
+  totalCount,
+  searchQuery,
+  selectedCategorySlug,
+  selectedStatus,
   editSku,
   saveMessage,
   upsertAction,
@@ -163,11 +174,10 @@ export function ProductsGrid({
   return (
     <>
       <section className="admin-header glass">
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div className="admin-products-heading-row">
           <h2 style={{ margin: 0 }}>Товары</h2>
-          <span className="pill pill-compact">{products.length}</span>
           <button className="button button-primary button-sm" type="button" onClick={openNew}>
-            + Добавить
+            Новый товар
           </button>
         </div>
       </section>
@@ -184,61 +194,115 @@ export function ProductsGrid({
       ) : null}
 
       <section style={{ marginTop: 16 }}>
+        <form action="/admin/products" method="get" className="admin-products-toolbar card glass">
+          <div className="admin-products-toolbar-left">
+            <button className="button button-primary button-sm" type="button" onClick={openNew}>
+              Новый товар
+            </button>
+            <div className="admin-products-found">Найдено: <strong>{totalCount}</strong></div>
+          </div>
+          <div className="admin-products-toolbar-right">
+            <select name="category" defaultValue={selectedCategorySlug} className="field admin-products-select">
+              <option value="">Все категории</option>
+              {categoryFilterOptions.map((option) => (
+                <option key={option.slug} value={option.slug}>{option.label}</option>
+              ))}
+            </select>
+            <select name="status" defaultValue={selectedStatus} className="field admin-products-select admin-products-select-small">
+              <option value="all">Все</option>
+              <option value="in-stock">В наличии</option>
+              <option value="out-of-stock">Нет в наличии</option>
+              <option value="with-photo">С фото</option>
+              <option value="without-photo">Без фото</option>
+            </select>
+            <div className="admin-products-search-wrap">
+              <input
+                type="search"
+                name="q"
+                defaultValue={searchQuery}
+                placeholder="Поиск"
+                className="field admin-products-search"
+              />
+              <button className="button button-secondary button-sm admin-products-search-button" type="submit">⌕</button>
+            </div>
+          </div>
+        </form>
+
         <div className="admin-product-grid">
           {products.map((product) => {
             const photoCount = product.imageUrls.length || (product.imageUrl ? 1 : 0);
+            const summary = (product.description ?? "").trim();
             return (
               <div key={product.id} className="admin-product-card card glass">
-                <button
-                  type="button"
-                  className="admin-product-card-link"
-                  onClick={() => openEdit(product)}
-                >
-                  <div className="admin-product-card-img">
-                    {product.imageUrl ? (
-                      <img src={product.imageUrl} alt={product.name} loading="lazy" />
-                    ) : (
-                      <div className="admin-product-card-noimg">Нет фото</div>
-                    )}
-                    {photoCount > 1 && (
-                      <span className="admin-product-card-count">{photoCount} фото</span>
-                    )}
-                    {!product.inStock && (
-                      <span className="admin-product-card-badge-off">Отключен</span>
-                    )}
-                  </div>
-                  <div className="admin-product-card-body">
-                    <div className="admin-product-card-category muted">{product.category.name}</div>
-                    <strong>{product.name}</strong>
-                    <div className="admin-product-card-price">
-                      {product.price.toLocaleString("ru-RU")} ₽
-                    </div>
-                  </div>
-                </button>
-                <div className="admin-product-card-actions">
+                <div className="admin-product-card-head">
+                  <button type="button" className="admin-product-card-title" onClick={() => openEdit(product)}>
+                    {product.name}
+                  </button>
+                  <button type="button" className="admin-product-card-menu" onClick={() => openEdit(product)} title="Открыть товар">
+                    ▾
+                  </button>
+                </div>
+
+                <div className="admin-product-card-content">
                   <button
-                    className="button button-primary button-sm"
                     type="button"
+                    className="admin-product-card-link"
                     onClick={() => openEdit(product)}
                   >
-                    Изменить
+                    <div className="admin-product-card-img">
+                      {product.imageUrl ? (
+                        <img src={product.imageUrl} alt={product.name} loading="lazy" />
+                      ) : (
+                        <div className="admin-product-card-noimg">Нет фото</div>
+                      )}
+                      {photoCount > 1 && (
+                        <span className="admin-product-card-count">{photoCount} фото</span>
+                      )}
+                    </div>
                   </button>
-                  <form action={toggleStockAction} style={{ display: "inline" }}>
-                    <input type="hidden" name="sku" value={product.sku} />
-                    <input type="hidden" name="current" value={String(product.inStock)} />
-                    <button className="button button-secondary button-sm" type="submit">
-                      {product.inStock ? "Скрыть" : "Показать"}
-                    </button>
-                  </form>
-                  <form action={deleteAction} style={{ display: "inline" }}>
-                    <input type="hidden" name="sku" value={product.sku} />
-                    <ConfirmButton
-                      message={`Удалить «${product.name}»?`}
-                      className="button button-secondary button-sm"
-                    >
-                      Удалить
-                    </ConfirmButton>
-                  </form>
+
+                  <div className="admin-product-card-body">
+                    <div className="admin-product-card-category muted">{product.categoryPath}</div>
+                    <div className="admin-product-card-badges-row">
+                      <span className="admin-product-chip">SKU {product.sku}</span>
+                      {product.inStock ? (
+                        <span className="admin-product-chip admin-product-chip-success">Включен</span>
+                      ) : (
+                        <span className="admin-product-chip admin-product-chip-danger">Отключен</span>
+                      )}
+                    </div>
+                    <p className="admin-product-card-summary">
+                      {summary || "Описание товара не заполнено."}
+                    </p>
+                    <div className="admin-product-card-price">
+                      Цена: {product.price.toLocaleString("ru-RU")} RUB
+                    </div>
+                    <div className="admin-product-card-actions admin-product-card-actions-inline">
+                      <button
+                        className="button button-primary button-sm"
+                        type="button"
+                        onClick={() => openEdit(product)}
+                      >
+                        Изменить
+                      </button>
+                      <form action={toggleStockAction} style={{ display: "inline" }}>
+                        <input type="hidden" name="sku" value={product.sku} />
+                        <input type="hidden" name="current" value={String(product.inStock)} />
+                        <button className="button button-secondary button-sm" type="submit">
+                          {product.inStock ? "Скрыть" : "Показать"}
+                        </button>
+                      </form>
+                      <form action={deleteAction} style={{ display: "inline" }}>
+                        <input type="hidden" name="sku" value={product.sku} />
+                        <ConfirmButton
+                          message={`Удалить «${product.name}»?`}
+                          className="button button-secondary button-sm"
+                        >
+                          Удалить
+                        </ConfirmButton>
+                      </form>
+                    </div>
+                  </div>
                 </div>
               </div>
             );

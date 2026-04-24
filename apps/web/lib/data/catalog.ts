@@ -12,6 +12,7 @@ import {
   type FilterDefinition,
 } from "@prostor/core";
 import { prisma } from "@prostor/db";
+import { normalizeProductOptionsOrder } from "../product-options-order";
 
 type DbCategoryRecord = Awaited<ReturnType<typeof loadDbCategories>>[number];
 type DbProductRecord = Awaited<ReturnType<typeof loadDbProducts>>[number];
@@ -38,9 +39,10 @@ async function loadDbCategories() {
       filterSets: true,
       products: true,
     },
-    orderBy: {
-      name: "asc",
-    },
+    orderBy: [
+      { position: "asc" },
+      { name: "asc" },
+    ],
   });
 }
 
@@ -214,7 +216,7 @@ export async function getProductOptions(productSlug: string): Promise<ProductOpt
   if (!product?.options || typeof product.options !== "object") return null;
   const opts = product.options as Record<string, unknown>;
   if (!Array.isArray(opts.groups) || opts.groups.length === 0) return null;
-  return product.options as ProductOptionsData;
+  return normalizeProductOptionsOrder(product.options as ProductOptionsData);
 }
 
 export async function getCatalogSummaryData() {
@@ -288,6 +290,7 @@ export type CategoryTreeNode = {
   name: string;
   slug: string;
   imageUrl: string | null;
+  position: number;
   parentId: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
@@ -300,7 +303,7 @@ export type CategoryTreeNode = {
 export async function loadCategoryTree(): Promise<CategoryTreeNode[]> {
   const flat = await safeQuery(() =>
     prisma.category.findMany({
-      orderBy: { name: "asc" },
+      orderBy: [{ position: "asc" }, { name: "asc" }],
       include: { _count: { select: { products: true, children: true } } },
     }),
   );
@@ -314,6 +317,7 @@ export async function loadCategoryTree(): Promise<CategoryTreeNode[]> {
       name: cat.name,
       slug: cat.slug,
       imageUrl: cat.imageUrl,
+      position: cat.position,
       parentId: cat.parentId,
       seoTitle: cat.seoTitle,
       seoDescription: cat.seoDescription,

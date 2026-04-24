@@ -26,7 +26,7 @@ export default async function AdminProductsPage({ searchParams }: AdminProductsP
   const currentPage = Math.max(1, Number(params.page) || 1);
 
   const categories = await prisma.category.findMany({
-    orderBy: { name: "asc" },
+    orderBy: [{ position: "asc" }, { name: "asc" }],
     select: { id: true, name: true, slug: true, parentId: true },
   });
 

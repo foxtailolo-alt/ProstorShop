@@ -154,11 +154,12 @@ infra/
 - Production deployment to VPS is live on `https://88-218-64-61.sslip.io`, and Telegram login was fixed to use the real HTTPS domain instead of localhost.
 - Safe production packaging and env guards exist: `corepack pnpm deploy:pack` and `corepack pnpm --filter @prostor/web build:prod`.
 - Production media storage is externalized via `UPLOADS_DIR=/home/deploy/prostor-uploads`, and release archives no longer overwrite the uploads directory.
+- Verified 2026-04-24: if files were changed only in `apps/web/public/uploads`, a normal `deploy:pack` release is not enough; those media files must be synced to `/home/deploy/prostor-uploads` separately.
 - Vitest coverage expanded for banners, cart variants, AI specs route, cart-selection helpers, and catalog tree helpers (60 tests across 9 files).
 
 ### Remaining Work
 
-- **Deploy latest to VPS** — square image workflow, homepage admin polish, admin product catalog redesign, Telegram post template updates, and storefront coverflow/bestsellers tweaks are not yet documented as deployed.
+- Run a focused production smoke check for admin flows: category reorder, `/admin/products` live filters, competitor pricing review flow, and media editing after save.
 - **Populate homepage sections** — use admin UI at `/admin/marketing/homepage` to create bestsellers, category grid, and coverflow sections with real product data.
 - Run a full post-deploy smoke check for the live stack: `/login`, `/profile`, cart promo flow, referral promo flow, homepage section management, Telegram post publishing, and Mini App launch from bot.
 - Fix product options cart/order flow — extend CartItem type & OrderItem model to include `variantLabel`.
@@ -168,7 +169,7 @@ infra/
 - Consider bcrypt or argon2 for password hashing (currently SHA-256) before launching phone auth publicly.
 - Add AI SEO generation for products (currently only categories have it).
 
-## Next Session Handoff (Updated 2026-04-23)
+## Next Session Handoff (Updated 2026-04-24)
 
 ### Verified Context
 
@@ -191,6 +192,10 @@ infra/
 - `scripts/assert-public-env.mjs` blocks unsafe production builds, and `scripts/build-deploy-archive.mjs` creates the safe release tarball.
 - The live site already serves the correct login domain `https://88-218-64-61.sslip.io`.
 - Uploaded media must use `UPLOADS_DIR` on production; current VPS value is `/home/deploy/prostor-uploads` and nginx serves `/uploads/*` from the same location.
+- Production code and schema were redeployed successfully on 2026-04-24; the VPS now matches the local workspace commit content for `package.json` and `packages/db/prisma/schema.prisma`.
+- A server backup exists from before the deploy in `/home/deploy/backups` as `ProstorShop_20260424_171441.tgz` and `prostor-uploads_20260424_171441.tgz`.
+- Local product images for AirPods Max 2 were missing on the VPS after deploy because `deploy:pack` excludes uploads by design; they were fixed by syncing local `apps/web/public/uploads` into `/home/deploy/prostor-uploads` separately.
+- When local changes touch uploaded files, the production deploy checklist must include an extra media sync step after code deploy.
 - AI specs endpoint uses Responses API (`/v1/responses`) with `web_search_preview` tool for factual data.
 - `infra/ai-proxy/server.py` supports configurable upstream URLs; its real `proxy.env` must stay outside git.
 - Root SSH access on the main VPS accepts `~/.ssh/prostor_tradein_bot_ed25519_nopass` for passwordless deploys.
@@ -202,11 +207,12 @@ infra/
 ### Next Recommended Steps
 
 1. **Deploy to VPS**: `corepack pnpm deploy:pack` → scp → extract → `db push` → restart. Latest code includes square media workflow, homepage admin polish, admin product filters, Telegram post template helpers, and coverflow/bestsellers visual changes.
-2. **Populate homepage sections**: Use `/admin/marketing/homepage` to create bestsellers, category grid, and coverflow sections.
-3. Run a full manual production smoke test for login, profile, cart, promo, homepage admin flows, Telegram posting, and Mini App launch.
-4. Fix product options cart/order flow — variants lost on add-to-cart.
-5. Convert schema changes into proper Prisma migrations before next structural update.
-6. Verify Telegram posting end-to-end with the current bot token and target channel permissions.
+2. **If media changed locally**: sync `apps/web/public/uploads` to `/home/deploy/prostor-uploads` separately; the release tarball intentionally excludes uploads.
+3. **Populate homepage sections**: Use `/admin/marketing/homepage` to create bestsellers, category grid, and coverflow sections.
+4. Run a full manual production smoke test for login, profile, cart, promo, homepage admin flows, Telegram posting, and Mini App launch.
+5. Fix product options cart/order flow — variants lost on add-to-cart.
+6. Convert schema changes into proper Prisma migrations before next structural update.
+7. Verify Telegram posting end-to-end with the current bot token and target channel permissions.
 
 ## Build Order
 
@@ -239,6 +245,7 @@ infra/
 - Build production releases with `corepack pnpm deploy:pack` so local `.env` files and `.next` output are not shipped.
 - On the VPS, keep production public URLs only in `/home/deploy/ProstorShop/.env` and remove `apps/web/.env.local` before `build:prod`.
 - On production, set `UPLOADS_DIR=/home/deploy/prostor-uploads` so uploaded media lives outside the release directory and survives deploys.
+- If local media files were edited directly under `apps/web/public/uploads`, sync them to `/home/deploy/prostor-uploads` separately after the code release.
 
 ## Media Handling
 
@@ -246,6 +253,7 @@ infra/
 - On the VPS, nginx should serve `/uploads/*` from the same directory specified by `UPLOADS_DIR`.
 - Admin product form supports direct JPG, PNG, and WebP upload.
 - Uploaded media should be included in VPS backup policy.
+- `corepack pnpm deploy:pack` does not ship local uploads; that is intentional.
 
 ## Definition Of Done
 

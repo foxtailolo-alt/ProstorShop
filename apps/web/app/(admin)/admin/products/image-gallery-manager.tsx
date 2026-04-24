@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import {
+  applyBackgroundRemoval,
+  DEFAULT_BACKGROUND_REMOVAL_TOLERANCE,
+  MAX_BACKGROUND_REMOVAL_TOLERANCE,
+  MIN_BACKGROUND_REMOVAL_TOLERANCE,
+} from "../../../../lib/background-removal";
 import { reorderProductImagesAction, deleteProductImageAction, replaceProductImageAction, removeImageBackgroundAction } from "./actions";
 import { SquareImageEditorModal } from "../../../../components/admin/square-image-editor-modal";
 
@@ -29,6 +35,7 @@ export function ImageGalleryManager({
   const [isPending, startTransition] = useTransition();
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [removingBg, setRemovingBg] = useState<number | null>(null);
+  const [backgroundTolerance, setBackgroundTolerance] = useState(DEFAULT_BACKGROUND_REMOVAL_TOLERANCE);
 
   useEffect(() => {
     setImages(imageUrls);
@@ -83,39 +90,7 @@ export function ImageGalleryManager({
     context.drawImage(image, 0, 0);
 
     const frame = context.getImageData(0, 0, canvas.width, canvas.height);
-    const pixels = frame.data;
-    const totalPixels = canvas.width * canvas.height;
-    const samplePositions = [0, canvas.width - 1, (canvas.height - 1) * canvas.width, totalPixels - 1];
-
-    let bgR = 0;
-    let bgG = 0;
-    let bgB = 0;
-
-    for (const position of samplePositions) {
-      const pixelIndex = position * 4;
-      bgR += pixels[pixelIndex] ?? 0;
-      bgG += pixels[pixelIndex + 1] ?? 0;
-      bgB += pixels[pixelIndex + 2] ?? 0;
-    }
-
-    bgR = Math.round(bgR / samplePositions.length);
-    bgG = Math.round(bgG / samplePositions.length);
-    bgB = Math.round(bgB / samplePositions.length);
-
-    const tolerance = 42;
-    for (let index = 0; index < totalPixels; index += 1) {
-      const pixelIndex = index * 4;
-      const red = pixels[pixelIndex] ?? 0;
-      const green = pixels[pixelIndex + 1] ?? 0;
-      const blue = pixels[pixelIndex + 2] ?? 0;
-      const distance = Math.sqrt((red - bgR) ** 2 + (green - bgG) ** 2 + (blue - bgB) ** 2);
-
-      if (distance < tolerance) {
-        pixels[pixelIndex + 3] = 0;
-      } else if (distance < tolerance * 1.5) {
-        pixels[pixelIndex + 3] = Math.round(((distance - tolerance) / (tolerance * 0.5)) * 255);
-      }
-    }
+    applyBackgroundRemoval(frame.data, canvas.width, canvas.height, { tolerance: backgroundTolerance });
 
     context.putImageData(frame, 0, 0);
 
@@ -294,6 +269,7 @@ export function ImageGalleryManager({
       const fd = new FormData();
       fd.set("sku", sku);
       fd.set("imageUrl", url);
+      fd.set("tolerance", String(backgroundTolerance));
       try {
         const result = await removeImageBackgroundAction(fd);
         if (result.newUrl) {
@@ -310,6 +286,22 @@ export function ImageGalleryManager({
 
   return (
     <div className={`admin-gallery-manager ${isPending ? "admin-gallery-pending" : ""}`}>
+      <label className="admin-gallery-tolerance">
+        <span className="admin-gallery-tolerance-label">
+          Чувствительность удаления фона: {backgroundTolerance}
+        </span>
+        <input
+          type="range"
+          min={MIN_BACKGROUND_REMOVAL_TOLERANCE}
+          max={MAX_BACKGROUND_REMOVAL_TOLERANCE}
+          step={1}
+          value={backgroundTolerance}
+          onChange={(event) => setBackgroundTolerance(Number(event.target.value))}
+        />
+        <span className="admin-gallery-tolerance-hint">
+          Для светлых товаров уменьшайте значение, для чистого белого фона увеличивайте.
+        </span>
+      </label>
       <div className="admin-gallery-grid">
         {images.map((url, index) => (
           <div

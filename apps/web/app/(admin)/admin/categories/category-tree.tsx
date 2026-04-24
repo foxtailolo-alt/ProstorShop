@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { CategoryTreeNode } from "../../../../lib/data/catalog";
-import { upsertCategoryAction, deleteCategoryAction } from "./actions";
+import { upsertCategoryAction, deleteCategoryAction, reorderCategoryAction } from "./actions";
 import { ConfirmButton } from "../../../../components/admin/confirm-button";
 
 const cyrMap: Record<string, string> = {
@@ -24,6 +25,37 @@ function toSlug(value: string) {
 type Props = {
   tree: CategoryTreeNode[];
 };
+
+type DropIndicator = {
+  targetId: string;
+  placement: "before" | "after";
+};
+
+function reorderTree(nodes: CategoryTreeNode[], draggedId: string, targetId: string, placement: "before" | "after"): CategoryTreeNode[] {
+  const siblingIds = new Set(nodes.map((node) => node.id));
+
+  if (siblingIds.has(draggedId) && siblingIds.has(targetId)) {
+    const reordered = nodes.filter((node) => node.id !== draggedId);
+    const targetIndex = reordered.findIndex((node) => node.id === targetId);
+
+    if (targetIndex === -1) {
+      return nodes;
+    }
+
+    const draggedNode = nodes.find((node) => node.id === draggedId);
+    if (!draggedNode) {
+      return nodes;
+    }
+
+    reordered.splice(placement === "before" ? targetIndex : targetIndex + 1, 0, draggedNode);
+    return reordered;
+  }
+
+  return nodes.map((node) => ({
+    ...node,
+    children: reorderTree(node.children, draggedId, targetId, placement),
+  }));
+}
 
 function buildFlatOptions(
   nodes: CategoryTreeNode[],
@@ -62,38 +94,69 @@ function TreeItem({
   depth,
   expandedIds,
   selectedId,
+  dragCategoryId,
+  dropIndicator,
   onToggle,
   onSelect,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDrop,
 }: {
   node: CategoryTreeNode;
   depth: number;
   expandedIds: Set<string>;
   selectedId: string | null;
+  dragCategoryId: string | null;
+  dropIndicator: DropIndicator | null;
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
+  onDragStart: (event: React.DragEvent<HTMLSpanElement>, node: CategoryTreeNode) => void;
+  onDragEnd: () => void;
+  onDragOver: (event: React.DragEvent<HTMLDivElement>, node: CategoryTreeNode) => void;
+  onDrop: (node: CategoryTreeNode) => void;
 }) {
   const hasChildren = node.children.length > 0;
   const isExpanded = expandedIds.has(node.id);
   const isSelected = selectedId === node.id;
+  const dropClass = dropIndicator?.targetId === node.id ? ` admin-tree-node-drop-${dropIndicator.placement}` : "";
+  const isDragging = dragCategoryId === node.id;
 
   return (
     <>
       <div
-        className={`admin-tree-node${isSelected ? " admin-tree-node-selected" : ""}`}
+        className={`admin-tree-node${isSelected ? " admin-tree-node-selected" : ""}${dropClass}${isDragging ? " admin-tree-node-dragging" : ""}`}
         style={{ paddingLeft: 12 + depth * 20 }}
+        onDragEnd={onDragEnd}
+        onDragOver={(event) => onDragOver(event, node)}
+        onDrop={() => onDrop(node)}
       >
+        <span
+          className="admin-tree-drag-handle"
+          draggable
+          onDragStart={(event) => onDragStart(event, node)}
+          onDragEnd={onDragEnd}
+          aria-label={`Перетащить категорию ${node.name}`}
+          role="button"
+          tabIndex={0}
+          title="Перетащить выше или ниже"
+        >
+          ⋮⋮
+        </span>
         <button
           type="button"
           className="admin-tree-toggle"
+          draggable={false}
           onClick={() => hasChildren && onToggle(node.id)}
           aria-label={hasChildren ? (isExpanded ? "Свернуть" : "Развернуть") : undefined}
         >
           {hasChildren ? (isExpanded ? "−" : "+") : " "}
         </button>
-        <span className="admin-tree-icon">📁</span>
+        <span className="admin-tree-icon" draggable={false}>📁</span>
         <button
           type="button"
           className="admin-tree-name"
+          draggable={false}
           onClick={() => onSelect(node.id)}
         >
           {node.name}
@@ -107,8 +170,14 @@ function TreeItem({
             depth={depth + 1}
             expandedIds={expandedIds}
             selectedId={selectedId}
+            dragCategoryId={dragCategoryId}
+            dropIndicator={dropIndicator}
             onToggle={onToggle}
             onSelect={onSelect}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
           />
         ))}
     </>
@@ -299,10 +368,19 @@ function CategoryForm({
 }
 
 export function CategoryManager({ tree }: Props) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [treeState, setTreeState] = useState(tree);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createParentId, setCreateParentId] = useState<string | null>(null);
+  const [dragCategoryId, setDragCategoryId] = useState<string | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null);
+
+  useEffect(() => {
+    setTreeState(tree);
+  }, [tree]);
 
   function toggleExpand(id: string) {
     setExpandedIds((prev) => {
@@ -324,14 +402,72 @@ export function CategoryManager({ tree }: Props) {
     setSelectedId(null);
   }
 
-  const selectedNode = selectedId ? findNode(tree, selectedId) : null;
+  function handleDragStart(event: React.DragEvent<HTMLSpanElement>, node: CategoryTreeNode) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", node.id);
+    setDragCategoryId(node.id);
+    setDropIndicator(null);
+  }
+
+  function handleDragEnd() {
+    setDragCategoryId(null);
+    setDropIndicator(null);
+  }
+
+  function handleDragOver(event: React.DragEvent<HTMLDivElement>, node: CategoryTreeNode) {
+    if (!dragCategoryId || dragCategoryId === node.id) {
+      return;
+    }
+
+    const draggedNode = findNode(treeState, dragCategoryId);
+    if (!draggedNode || draggedNode.parentId !== node.parentId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const placement = event.clientY < bounds.top + bounds.height / 2 ? "before" : "after";
+    setDropIndicator({ targetId: node.id, placement });
+  }
+
+  function handleDrop(node: CategoryTreeNode) {
+    if (!dragCategoryId || !dropIndicator || dropIndicator.targetId !== node.id || dragCategoryId === node.id) {
+      handleDragEnd();
+      return;
+    }
+
+    const draggedNode = findNode(treeState, dragCategoryId);
+    if (!draggedNode || draggedNode.parentId !== node.parentId) {
+      handleDragEnd();
+      return;
+    }
+
+    const nextTree = reorderTree(treeState, dragCategoryId, node.id, dropIndicator.placement);
+    setTreeState(nextTree);
+
+    const formData = new FormData();
+    formData.set("draggedId", dragCategoryId);
+    formData.set("targetId", node.id);
+    formData.set("placement", dropIndicator.placement);
+
+    startTransition(() => {
+      void reorderCategoryAction(formData)
+        .then(() => router.refresh())
+        .catch(() => router.refresh());
+    });
+
+    handleDragEnd();
+  }
+
+  const selectedNode = selectedId ? findNode(treeState, selectedId) : null;
 
   // Exclude selected node and its descendants from parent picker when editing
   const editExcludeIds = selectedNode ? collectDescendantIds(selectedNode) : new Set<string>();
-  const editParentOptions = buildFlatOptions(tree, "", editExcludeIds);
+  const editParentOptions = buildFlatOptions(treeState, "", editExcludeIds);
 
   // For create mode, all categories are available as parents
-  const createParentOptions = buildFlatOptions(tree, "");
+  const createParentOptions = buildFlatOptions(treeState, "");
 
   return (
     <div className="admin-tree-layout">
@@ -347,21 +483,28 @@ export function CategoryManager({ tree }: Props) {
           )}
         </div>
         <div className="admin-tree-list">
-          {tree.map((node) => (
+          {treeState.map((node) => (
             <TreeItem
               key={node.id}
               node={node}
               depth={0}
               expandedIds={expandedIds}
               selectedId={selectedId}
+              dragCategoryId={dragCategoryId}
+              dropIndicator={dropIndicator}
               onToggle={toggleExpand}
               onSelect={selectCategory}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
             />
           ))}
-          {tree.length === 0 && (
+          {treeState.length === 0 && (
             <div className="muted" style={{ padding: 16 }}>Нет категорий</div>
           )}
         </div>
+        {isPending ? <div className="muted" style={{ marginTop: 12 }}>Сохраняем новый порядок...</div> : null}
       </div>
       <div className="admin-tree-detail">
         {creating ? (

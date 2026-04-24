@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { catalogProducts } from "@prostor/core";
 import { StoreNav } from "../../../../../components/layout/store-nav";
 import { buildAbsoluteUrl } from "../../../../../lib/seo";
-import { findCatalogCategory, findCatalogProduct, getProductRecommendations, getProductOptions, loadCategoryTree, getCategoryPath } from "../../../../../lib/data/catalog";
+import { findCatalogProduct, findCatalogProductBySlug, findNodeBySlug, getProductRecommendations, getProductOptions, loadCategoryTree, getCategoryPath } from "../../../../../lib/data/catalog";
 import { addToCartAction } from "../../../cart/actions";
 import { ProductGallery } from "../../../../../components/product/product-gallery";
 import { ProductInfoWithOptions } from "../../../../../components/product/product-info-options";
@@ -16,6 +16,16 @@ type ProductPageProps = {
   }>;
 };
 
+export const dynamic = "force-dynamic";
+
+function decodeRouteParam(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export function generateStaticParams() {
   return catalogProducts.map((product) => ({
     category: product.categorySlug,
@@ -24,36 +34,49 @@ export function generateStaticParams() {
 }
 
 export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
-  const { category, product } = await params;
-  const currentProduct = await findCatalogProduct(category, product);
+  const rawParams = await params;
+  const category = decodeRouteParam(rawParams.category);
+  const product = decodeRouteParam(rawParams.product);
+  const currentProduct = await findCatalogProduct(category, product) ?? await findCatalogProductBySlug(product);
 
   if (!currentProduct) {
     return {};
   }
 
+  const canonicalCategory = currentProduct.categorySlug;
+  const canonicalProduct = currentProduct.slug;
+
   return {
     title: currentProduct.seoTitle ?? `${currentProduct.name} — купить в Просторе`,
     description: currentProduct.seoDescription ?? currentProduct.summary,
     alternates: {
-      canonical: buildAbsoluteUrl(`/catalog/${category}/${product}`),
+      canonical: buildAbsoluteUrl(`/catalog/${canonicalCategory}/${canonicalProduct}`),
     },
     openGraph: {
       title: currentProduct.seoTitle ?? `${currentProduct.name} — купить в Просторе`,
       description: currentProduct.seoDescription ?? currentProduct.summary,
-      url: buildAbsoluteUrl(`/catalog/${category}/${product}`),
+      url: buildAbsoluteUrl(`/catalog/${canonicalCategory}/${canonicalProduct}`),
       type: "website",
     },
   };
 }
 
 export default async function ProductPage({ params }: ProductPageProps) {
-  const { category, product } = await params;
-  const [currentCategory, currentProduct] = await Promise.all([
-    findCatalogCategory(category),
+  const rawParams = await params;
+  const category = decodeRouteParam(rawParams.category);
+  const product = decodeRouteParam(rawParams.product);
+  const [categoryMatchedProduct, productBySlug] = await Promise.all([
     findCatalogProduct(category, product),
+    findCatalogProductBySlug(product),
   ]);
 
-  if (!currentCategory || !currentProduct) {
+  const currentProduct = categoryMatchedProduct ?? productBySlug;
+
+  if (currentProduct && currentProduct.categorySlug !== category) {
+    redirect(`/catalog/${currentProduct.categorySlug}/${currentProduct.slug}`);
+  }
+
+  if (!currentProduct) {
     notFound();
   }
 
@@ -63,7 +86,15 @@ export default async function ProductPage({ params }: ProductPageProps) {
     loadCategoryTree(),
   ]);
 
-  const ancestors = getCategoryPath(tree, category).slice(0, -1);
+  const categoryPath = getCategoryPath(tree, currentProduct.categorySlug);
+  const categoryNode = findNodeBySlug(tree, currentProduct.categorySlug);
+  const resolvedCategory = categoryNode
+    ? { slug: categoryNode.slug, name: categoryNode.name }
+    : {
+        slug: currentProduct.categorySlug,
+        name: currentProduct.highlights[1] ?? currentProduct.categorySlug,
+      };
+  const ancestors = categoryPath.slice(0, -1);
 
   const productImages = currentProduct.imageUrls?.length
     ? currentProduct.imageUrls
@@ -106,7 +137,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           </span>
         ))}
         <span className="breadcrumb-sep">/</span>
-        <Link href={`/catalog/${currentCategory.slug}`}>{currentCategory.name}</Link>
+        <Link href={`/catalog/${resolvedCategory.slug}`}>{resolvedCategory.name}</Link>
         <span className="breadcrumb-sep">/</span>
         <span>{currentProduct.name}</span>
       </div>
@@ -127,7 +158,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 badge={currentProduct.badge}
                 inStock={currentProduct.inStock}
                 slug={currentProduct.slug}
-                categorySlug={currentCategory.slug}
+                categorySlug={resolvedCategory.slug}
                 addToCartAction={addToCartAction}
               />
             ) : (
@@ -147,7 +178,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 <form action={addToCartAction} className="product-page-actions">
                   <input type="hidden" name="productSlug" value={currentProduct.slug} />
                   <input type="hidden" name="quantity" value="1" />
-                  <input type="hidden" name="redirectTo" value={`/catalog/${currentCategory.slug}/${currentProduct.slug}`} />
+                  <input type="hidden" name="redirectTo" value={`/catalog/${resolvedCategory.slug}/${currentProduct.slug}`} />
                   <button className="button button-primary button-lg" type="submit">
                     Добавить в корзину
                   </button>

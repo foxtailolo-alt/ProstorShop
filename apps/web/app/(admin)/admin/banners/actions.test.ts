@@ -136,6 +136,7 @@ describe("banner actions", () => {
       slug: "iphone",
       name: "iPhone",
       imageUrl: null,
+      position: 0,
       parentId: null,
       seoTitle: null,
       seoDescription: null,

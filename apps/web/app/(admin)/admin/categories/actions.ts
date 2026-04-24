@@ -29,6 +29,23 @@ function parseValues(value: string) {
     .filter(Boolean);
 }
 
+async function normalizeSiblingCategoryPositions(parentId: string | null) {
+  const siblings = await prisma.category.findMany({
+    where: { parentId },
+    orderBy: [{ position: "asc" }, { name: "asc" }],
+    select: { id: true },
+  });
+
+  await prisma.$transaction(
+    siblings.map((sibling, index) =>
+      prisma.category.update({
+        where: { id: sibling.id },
+        data: { position: index },
+      }),
+    ),
+  );
+}
+
 async function syncCategoryFilters(categoryId: string) {
   const category = await prisma.category.findUnique({
     where: { id: categoryId },
@@ -96,10 +113,19 @@ export async function upsertCategoryAction(formData: FormData) {
     throw new Error("Category form is incomplete.");
   }
 
+  const existingCategory = categoryId
+    ? await prisma.category.findUnique({ where: { id: categoryId }, select: { parentId: true } })
+    : null;
+
+  const position = categoryId && existingCategory?.parentId === parentId
+    ? undefined
+    : await prisma.category.count({ where: { parentId } });
+
   const data = {
     name,
     slug,
     parentId,
+    ...(typeof position === "number" ? { position } : {}),
     seoTitle: seoTitle || null,
     seoDescription: seoDescription || null,
     seoKeywords,
@@ -110,6 +136,11 @@ export async function upsertCategoryAction(formData: FormData) {
     : await prisma.category.create({ data });
 
   await syncCategoryFilters(category.id);
+
+  if (categoryId && existingCategory?.parentId !== parentId) {
+    await normalizeSiblingCategoryPositions(existingCategory?.parentId ?? null);
+    await normalizeSiblingCategoryPositions(parentId);
+  }
 
   await logAdminActivity({
     entityType: "category",
@@ -146,9 +177,12 @@ export async function deleteCategoryAction(formData: FormData) {
     throw new Error("Нельзя удалить категорию, в которой есть товары.");
   }
 
+  const category = await prisma.category.findUnique({ where: { id: categoryId }, select: { parentId: true } });
+
   await prisma.attributeDefinition.deleteMany({ where: { categoryId } });
   await prisma.filterSet.deleteMany({ where: { categoryId } });
   await prisma.category.delete({ where: { id: categoryId } });
+  await normalizeSiblingCategoryPositions(category?.parentId ?? null);
 
   await logAdminActivity({
     entityType: "category",
@@ -160,6 +194,64 @@ export async function deleteCategoryAction(formData: FormData) {
   revalidatePath("/admin/categories");
   revalidatePath("/admin");
   revalidatePath("/admin/activity");
+  revalidatePath("/catalog");
+}
+
+export async function reorderCategoryAction(formData: FormData) {
+  await requirePermission("categories", "write");
+
+  const draggedId = String(formData.get("draggedId") ?? "").trim();
+  const targetId = String(formData.get("targetId") ?? "").trim();
+  const placement = String(formData.get("placement") ?? "").trim();
+
+  if (!draggedId || !targetId || !["before", "after"].includes(placement) || draggedId === targetId) {
+    throw new Error("Некорректный запрос на изменение порядка категорий.");
+  }
+
+  const [dragged, target] = await Promise.all([
+    prisma.category.findUnique({ where: { id: draggedId }, select: { id: true, name: true, parentId: true } }),
+    prisma.category.findUnique({ where: { id: targetId }, select: { id: true, parentId: true } }),
+  ]);
+
+  if (!dragged || !target || dragged.parentId !== target.parentId) {
+    throw new Error("Перемещать можно только внутри одного уровня категорий.");
+  }
+
+  const siblings = await prisma.category.findMany({
+    where: { parentId: dragged.parentId },
+    orderBy: [{ position: "asc" }, { name: "asc" }],
+    select: { id: true },
+  });
+
+  const reorderedIds = siblings.map((sibling) => sibling.id).filter((id) => id !== draggedId);
+  const targetIndex = reorderedIds.findIndex((id) => id === targetId);
+
+  if (targetIndex === -1) {
+    throw new Error("Целевая категория для перемещения не найдена.");
+  }
+
+  reorderedIds.splice(placement === "before" ? targetIndex : targetIndex + 1, 0, draggedId);
+
+  await prisma.$transaction(
+    reorderedIds.map((id, index) =>
+      prisma.category.update({
+        where: { id },
+        data: { position: index },
+      }),
+    ),
+  );
+
+  await logAdminActivity({
+    entityType: "category",
+    entityId: dragged.id,
+    action: "category.reordered",
+    summary: `Изменен порядок категории ${dragged.name}.`,
+    metadata: { targetId, placement, parentId: dragged.parentId },
+  });
+
+  revalidatePath("/admin/categories");
+  revalidatePath("/admin");
+  revalidatePath("/admin/products");
   revalidatePath("/catalog");
 }
 

@@ -25,6 +25,7 @@ model User {
   orders           Order[]
   tradeInRequests  TradeInRequest[]
   serviceRequests  ServiceRequest[]
+  competitorPriceSyncRuns CompetitorPriceSyncRun[]
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 }
@@ -51,6 +52,7 @@ model Category {
   name           String
   slug           String              @unique
   imageUrl       String?
+  position       Int                 @default(0)
   parentId       String?
   parent         Category?           @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
   children       Category[]          @relation("CategoryTree")
@@ -62,6 +64,8 @@ model Category {
   filterSets     FilterSet[]
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
+
+  @@index([parentId, position])
 }
 
 model Product {
@@ -88,6 +92,7 @@ model Product {
   recommendedBy  ProductRecommendation[] @relation("RecommendedProduct")
   recommendations ProductRecommendation[] @relation("SourceProduct")
   homepageItems   HomepageItem[]
+  competitorPriceReviewRows CompetitorPriceReviewRow[]
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 }
@@ -334,6 +339,59 @@ model ActivityLog {
   createdAt  DateTime @default(now())
 
   @@index([createdAt])
+}
+
+model CompetitorPriceSyncRun {
+  id             String                     @id @default(cuid())
+  source         String
+  scope          String
+  status         String                     @default("pending")
+  initiatedByUserId String?
+  initiatedByUser User?                     @relation(fields: [initiatedByUserId], references: [id], onDelete: SetNull)
+  matchedCount   Int                        @default(0)
+  unmatchedCount Int                        @default(0)
+  skippedCount   Int                        @default(0)
+  note           String?
+  rows           CompetitorPriceReviewRow[]
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  @@index([source, status, createdAt])
+  @@index([initiatedByUserId, createdAt])
+}
+
+model CompetitorPriceReviewRow {
+  id                   String                  @id @default(cuid())
+  syncRunId            String
+  syncRun              CompetitorPriceSyncRun  @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
+  productId            String
+  product              Product                 @relation(fields: [productId], references: [id], onDelete: Cascade)
+  status               String                  @default("pending")
+  matchConfidence      String
+  matchMethod          String
+  competitorUrl        String
+  competitorProductName String
+  competitorBrand      String?
+  competitorCategoryPath String?
+  currentBasePrice     Decimal                 @db.Decimal(10, 2)
+  competitorBasePrice  Decimal                 @db.Decimal(10, 2)
+  proposedBasePrice    Decimal                 @db.Decimal(10, 2)
+  currentOptions       Json?
+  competitorOptions    Json?
+  proposedOptions      Json?
+  currentVariantCount  Int                     @default(0)
+  proposedVariantCount Int                     @default(0)
+  note                 String?
+  appliedAt            DateTime?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  @@unique([syncRunId, productId])
+  @@index([productId, status])
+  @@index([syncRunId, status])
+  @@index([matchConfidence, status])
 }
 
 model HomepageSection {

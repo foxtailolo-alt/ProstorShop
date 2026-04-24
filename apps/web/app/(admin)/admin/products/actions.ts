@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@prostor/db";
 import { logAdminActivity } from "../../../../lib/audit";
 import { requirePermission } from "../../../../lib/auth/session";
+import { applyBackgroundRemoval, clampBackgroundRemovalTolerance } from "../../../../lib/background-removal";
 import { saveProductImages, saveProductImage } from "../../../../lib/media";
 
 const maxProductImageCount = 10;
@@ -453,6 +454,7 @@ export async function removeImageBackgroundAction(formData: FormData) {
   await requirePermission("products", "write");
   const sku = String(formData.get("sku") ?? "").trim();
   const imageUrl = String(formData.get("imageUrl") ?? "").trim();
+  const tolerance = clampBackgroundRemovalTolerance(Number(formData.get("tolerance") ?? Number.NaN));
 
   if (!sku || !imageUrl) {
     throw new Error("Invalid background removal request.");
@@ -485,45 +487,7 @@ export async function removeImageBackgroundAction(formData: FormData) {
     .toBuffer({ resolveWithObject: true });
 
   const pixels = new Uint8Array(rawPixels);
-  const totalPixels = info.width * info.height;
-
-  // Sample corners to determine background color
-  const samplePositions = [
-    0,
-    info.width - 1,
-    (info.height - 1) * info.width,
-    totalPixels - 1,
-  ];
-
-  let bgR = 0, bgG = 0, bgB = 0, samples = 0;
-  for (const pos of samplePositions) {
-    const i = pos * 4;
-    bgR += pixels[i]!;
-    bgG += pixels[i + 1]!;
-    bgB += pixels[i + 2]!;
-    samples++;
-  }
-  bgR = Math.round(bgR / samples);
-  bgG = Math.round(bgG / samples);
-  bgB = Math.round(bgB / samples);
-
-  // Make similar-colored pixels transparent
-  const tolerance = 42;
-  for (let i = 0; i < totalPixels; i++) {
-    const idx = i * 4;
-    const r = pixels[idx]!;
-    const g = pixels[idx + 1]!;
-    const b = pixels[idx + 2]!;
-
-    const dist = Math.sqrt((r - bgR) ** 2 + (g - bgG) ** 2 + (b - bgB) ** 2);
-
-    if (dist < tolerance) {
-      pixels[idx + 3] = 0;
-    } else if (dist < tolerance * 1.5) {
-      const alpha = Math.round(((dist - tolerance) / (tolerance * 0.5)) * 255);
-      pixels[idx + 3] = Math.min(pixels[idx + 3]!, alpha);
-    }
-  }
+  applyBackgroundRemoval(pixels, info.width, info.height, { tolerance });
 
   const resultBuffer = await sharp(Buffer.from(pixels.buffer), {
     raw: { width: info.width, height: info.height, channels: 4 },

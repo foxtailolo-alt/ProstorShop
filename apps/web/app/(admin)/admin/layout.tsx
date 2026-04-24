@@ -11,6 +11,7 @@ const adminNavigation = [
   { href: "/admin/activity", label: "Журнал", marketing: false },
   { href: "/admin/categories", label: "Категории", marketing: false },
   { href: "/admin/products", label: "Товары", marketing: false },
+  { href: "/admin/competitor-pricing", label: "Цены конкурентов", marketing: false },
   { href: "/admin/banners", label: "Баннеры", marketing: false },
   { href: "/admin/trade-in", label: "Trade-in", marketing: false },
   { href: "/admin/service-pricing", label: "Прайс сервиса", marketing: false },

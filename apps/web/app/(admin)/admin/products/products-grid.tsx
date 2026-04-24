@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ProductModal } from "./product-modal";
 import { ConfirmButton } from "../../../../components/admin/confirm-button";
@@ -74,6 +74,8 @@ export function ProductsGrid({
   toggleStockAction,
   deleteAction,
 }: Props) {
+  const filtersFormRef = useRef<HTMLFormElement>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialProduct = editSku
     ? products.find((p) => p.sku === editSku) ?? null
     : null;
@@ -82,10 +84,15 @@ export function ProductsGrid({
   const [editingProduct, setEditingProduct] = useState<ProductRecord | null>(initialProduct);
   const [notice, setNotice] = useState(saveMessage);
   const [pendingSavedSku, setPendingSavedSku] = useState<string | null>(null);
+  const [searchDraft, setSearchDraft] = useState(searchQuery);
 
   useEffect(() => {
     setNotice(saveMessage);
   }, [saveMessage]);
+
+  useEffect(() => {
+    setSearchDraft(searchQuery);
+  }, [searchQuery]);
 
   useEffect(() => {
     if (!editSku) {
@@ -131,6 +138,14 @@ export function ProductsGrid({
     setPendingSavedSku(null);
   }, [pendingSavedSku, products]);
 
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
   function openNew() {
     setEditingProduct(null);
     setModalOpen(true);
@@ -150,6 +165,26 @@ export function ProductsGrid({
     setNotice(successMessage);
     setPendingSavedSku(savedSku);
     setModalOpen(true);
+  }
+
+  function submitFilters() {
+    filtersFormRef.current?.requestSubmit();
+  }
+
+  function handleFilterChange() {
+    submitFilters();
+  }
+
+  function handleSearchChange(nextValue: string) {
+    setSearchDraft(nextValue);
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      submitFilters();
+    }, 350);
   }
 
   const modalData = editingProduct
@@ -194,7 +229,7 @@ export function ProductsGrid({
       ) : null}
 
       <section style={{ marginTop: 16 }}>
-        <form action="/admin/products" method="get" className="admin-products-toolbar card glass">
+        <form ref={filtersFormRef} action="/admin/products" method="get" className="admin-products-toolbar card glass">
           <div className="admin-products-toolbar-left">
             <button className="button button-primary button-sm" type="button" onClick={openNew}>
               Новый товар
@@ -202,29 +237,57 @@ export function ProductsGrid({
             <div className="admin-products-found">Найдено: <strong>{totalCount}</strong></div>
           </div>
           <div className="admin-products-toolbar-right">
-            <select name="category" defaultValue={selectedCategorySlug} className="field admin-products-select">
-              <option value="">Все категории</option>
-              {categoryFilterOptions.map((option) => (
-                <option key={option.slug} value={option.slug}>{option.label}</option>
-              ))}
-            </select>
-            <select name="status" defaultValue={selectedStatus} className="field admin-products-select admin-products-select-small">
-              <option value="all">Все</option>
-              <option value="in-stock">В наличии</option>
-              <option value="out-of-stock">Нет в наличии</option>
-              <option value="with-photo">С фото</option>
-              <option value="without-photo">Без фото</option>
-            </select>
-            <div className="admin-products-search-wrap">
+            <div className="admin-products-filters-row">
+              <label className="admin-products-filter-field">
+                <span className="admin-products-filter-label">Категория</span>
+                <select
+                  name="category"
+                  value={selectedCategorySlug}
+                  onChange={handleFilterChange}
+                  className="field admin-products-select"
+                >
+                  <option value="">Все категории</option>
+                  {categoryFilterOptions.map((option) => (
+                    <option key={option.slug} value={option.slug}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="admin-products-filter-field admin-products-filter-field-small">
+                <span className="admin-products-filter-label">Статус</span>
+                <select
+                  name="status"
+                  value={selectedStatus}
+                  onChange={handleFilterChange}
+                  className="field admin-products-select admin-products-select-small"
+                >
+                  <option value="all">Все</option>
+                  <option value="in-stock">В наличии</option>
+                  <option value="out-of-stock">Нет в наличии</option>
+                  <option value="with-photo">С фото</option>
+                  <option value="without-photo">Без фото</option>
+                </select>
+              </label>
+            </div>
+            <label className="admin-products-filter-field admin-products-search-field">
+              <span className="admin-products-filter-label">Поиск</span>
               <input
                 type="search"
                 name="q"
-                defaultValue={searchQuery}
+                value={searchDraft}
                 placeholder="Поиск"
                 className="field admin-products-search"
+                onChange={(event) => handleSearchChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    if (searchTimeoutRef.current) {
+                      clearTimeout(searchTimeoutRef.current);
+                    }
+                    submitFilters();
+                  }
+                }}
               />
-              <button className="button button-secondary button-sm admin-products-search-button" type="submit">⌕</button>
-            </div>
+            </label>
           </div>
         </form>
 

@@ -13,6 +13,7 @@ function makeNode(overrides: Partial<CategoryTreeNode> & { id: string; slug: str
   return {
     parentId: null,
     imageUrl: null,
+    position: 0,
     seoTitle: null,
     seoDescription: null,
     seoKeywords: [],

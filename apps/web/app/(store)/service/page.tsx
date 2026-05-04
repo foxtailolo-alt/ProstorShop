@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StoreNav } from "../../../components/layout/store-nav";
 import { getRuntimeFeatureFlags } from "../../../lib/data/catalog";
-import { listServicePriceRows } from "../../../lib/data/pricing";
+import { listServiceCatalogEntries } from "../../../lib/data/pricing";
 import { ServiceCalculator } from "./service-calculator";
 
 type ServicePageProps = {
@@ -13,8 +13,8 @@ type ServicePageProps = {
 };
 
 export default async function ServicePage({ searchParams }: ServicePageProps) {
-  const [servicePriceRows, featureFlags] = await Promise.all([
-    listServicePriceRows(),
+  const [serviceCatalogEntries, featureFlags] = await Promise.all([
+    listServiceCatalogEntries(),
     getRuntimeFeatureFlags(),
   ]);
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -46,7 +46,7 @@ export default async function ServicePage({ searchParams }: ServicePageProps) {
         </section>
       ) : (
         <section className="store-section">
-          <ServiceCalculator rows={servicePriceRows} />
+          <ServiceCalculator entries={serviceCatalogEntries} />
         </section>
       )}
 

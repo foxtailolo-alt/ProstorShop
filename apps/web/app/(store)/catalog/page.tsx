@@ -18,6 +18,7 @@ export default async function CatalogPage() {
         <div className="grid grid-5">
           {tree.map((category, i) => {
             const totalProducts = countTreeProducts(category);
+
             return (
               <Link
                 key={category.slug}

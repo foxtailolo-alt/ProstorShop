@@ -153,6 +153,8 @@ export default async function AdminCompetitorPricingPage({ searchParams }: Admin
   const categoryLabelBySlug = new Map(categoryOptions.map((option) => [option.slug, option.label]));
   const selectedCategoryLabel = selectedCategorySlug ? categoryLabelBySlug.get(selectedCategorySlug) ?? selectedCategorySlug : null;
   const selectedScope = getCompetitorSyncScopeDefinition(selectedRun?.scope);
+  const recentRuns = runs.slice(0, 3);
+  const olderRuns = runs.slice(3);
   const progressRowsTotal = categoryProgress.reduce((sum, item) => sum + item.totalCount, 0);
   const progressRowsProcessed = categoryProgress.reduce((sum, item) => sum + item.processedCount, 0);
   const progressCategoryItems: Array<{
@@ -217,7 +219,7 @@ export default async function AdminCompetitorPricingPage({ searchParams }: Admin
           <div className="section-label">Последние sync run</div>
           <div className="grid">
             {runs.length === 0 ? <p>Запусков пока не было.</p> : null}
-            {runs.map((run) => (
+            {recentRuns.map((run) => (
               <Link
                 key={run.id}
                 href={`/admin/competitor-pricing?run=${encodeURIComponent(run.id)}${selectedCategorySlug ? `&category=${encodeURIComponent(selectedCategorySlug)}` : ""}` as "/"}
@@ -226,6 +228,22 @@ export default async function AdminCompetitorPricingPage({ searchParams }: Admin
                 {run.createdAt.toLocaleString("ru-RU")} • {run.status} • {run._count.rows} строк • match {run.matchedCount}/{run.unmatchedCount}
               </Link>
             ))}
+            {olderRuns.length > 0 ? (
+              <details className="competitor-sync-history-details">
+                <summary>Еще {olderRuns.length} запусков</summary>
+                <div className="grid" style={{ marginTop: 12 }}>
+                  {olderRuns.map((run) => (
+                    <Link
+                      key={run.id}
+                      href={`/admin/competitor-pricing?run=${encodeURIComponent(run.id)}${selectedCategorySlug ? `&category=${encodeURIComponent(selectedCategorySlug)}` : ""}` as "/"}
+                      className="pill"
+                    >
+                      {run.createdAt.toLocaleString("ru-RU")} • {run.status} • {run._count.rows} строк • match {run.matchedCount}/{run.unmatchedCount}
+                    </Link>
+                  ))}
+                </div>
+              </details>
+            ) : null}
           </div>
         </article>
         <article className="card glass">

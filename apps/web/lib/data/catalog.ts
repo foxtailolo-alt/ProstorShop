@@ -13,6 +13,7 @@ import {
 } from "@prostor/core";
 import { prisma } from "@prostor/db";
 import { normalizeProductOptionsOrder } from "../product-options-order";
+import { resolveProductPrice } from "../pricing";
 
 type DbCategoryRecord = Awaited<ReturnType<typeof loadDbCategories>>[number];
 type DbProductRecord = Awaited<ReturnType<typeof loadDbProducts>>[number];
@@ -92,6 +93,16 @@ function mapDbProduct(record: DbProductRecord): CatalogProduct {
   const seedProduct = catalogProducts.find(
     (item) => item.sku === record.sku || item.slug === record.slug,
   );
+  const discountType = record.discountType === "percent" || record.discountType === "fixed"
+    ? record.discountType
+    : undefined;
+  const resolvedPrice = resolveProductPrice({
+    basePrice: Number(record.price),
+    discountType,
+    discountValue: record.discountValue ? Number(record.discountValue) : null,
+    discountStartsAt: record.discountStartsAt,
+    discountEndsAt: record.discountEndsAt,
+  });
   const imageUrls = record.imageUrls.length > 0
     ? record.imageUrls
     : [record.imageUrl, ...(seedProduct?.imageUrls ?? []), seedProduct?.imageUrl]
@@ -125,8 +136,11 @@ function mapDbProduct(record: DbProductRecord): CatalogProduct {
     imageUrls,
     seoTitle: record.seoTitle ?? seedProduct?.seoTitle,
     seoDescription: record.seoDescription ?? seedProduct?.seoDescription,
-    price: Number(record.price),
-    compareAtPrice: seedProduct?.compareAtPrice,
+    price: resolvedPrice.price,
+    compareAtPrice: resolvedPrice.compareAtPrice ?? seedProduct?.compareAtPrice,
+    discountType: resolvedPrice.isDiscountActive ? discountType : undefined,
+    discountValue: resolvedPrice.isDiscountActive && record.discountValue ? Number(record.discountValue) : undefined,
+    discountEndsAt: resolvedPrice.discountEndsAt?.toISOString(),
     badge: seedProduct?.badge,
     summary: record.description ?? seedProduct?.summary ?? `${record.name} в магазине Простор.`,
     highlights,
@@ -452,6 +466,9 @@ export type HomepageSectionItem = {
     imageUrls: string[];
     price: number;
     compareAtPrice?: number;
+    discountType?: "percent" | "fixed";
+    discountValue?: number;
+    discountEndsAt?: string;
     inStock: boolean;
     categorySlug: string;
     badge?: string;
@@ -490,7 +507,16 @@ export async function loadHomepageSections(): Promise<HomepageSectionData[]> {
         position: item.position,
         isHighlighted: item.isHighlighted,
         product: item.product
-          ? {
+          ? (() => {
+              const resolvedPrice = resolveProductPrice({
+                basePrice: Number(item.product.price),
+                discountType: item.product.discountType,
+                discountValue: item.product.discountValue ? Number(item.product.discountValue) : null,
+                discountStartsAt: item.product.discountStartsAt,
+                discountEndsAt: item.product.discountEndsAt,
+              });
+
+              return {
               slug: item.product.slug,
               name: item.product.name,
               brand: item.product.brand,
@@ -500,10 +526,19 @@ export async function loadHomepageSections(): Promise<HomepageSectionData[]> {
                 : item.product.imageUrl
                   ? [item.product.imageUrl]
                   : [],
-              price: Number(item.product.price),
+              price: resolvedPrice.price,
+              compareAtPrice: resolvedPrice.compareAtPrice,
+              discountType: resolvedPrice.isDiscountActive && item.product.discountType
+                ? item.product.discountType as "percent" | "fixed"
+                : undefined,
+              discountValue: resolvedPrice.isDiscountActive && item.product.discountValue
+                ? Number(item.product.discountValue)
+                : undefined,
+              discountEndsAt: resolvedPrice.discountEndsAt?.toISOString(),
               inStock: item.product.inStock,
               categorySlug: item.product.category.slug,
-            }
+            };
+            })()
           : null,
       })),
   }));

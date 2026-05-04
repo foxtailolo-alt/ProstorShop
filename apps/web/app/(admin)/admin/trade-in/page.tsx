@@ -1,10 +1,10 @@
 import { tradeInConditions } from "@prostor/core";
-import { listTradeInRules } from "../../../../lib/data/pricing";
+import { getActiveTradeInSnapshot, listTradeInSnapshots } from "../../../../lib/data/pricing";
 import { prisma } from "@prostor/db";
 import { isMarketingMode } from "../../../../lib/auth/marketing";
 import { AdminPagination, AdminSearch, PAGE_SIZE } from "../../../../components/admin/admin-pagination";
-import { deleteTradeInRuleAction, updateTradeInRequestStatusAction, upsertTradeInRuleAction } from "./actions";
-import { ConfirmButton } from "../../../../components/admin/confirm-button";
+import { summarizeTradeInAnswers } from "../../../../lib/trade-in-snapshot";
+import { refreshTradeInSnapshotAction, updateTradeInRequestStatusAction } from "./actions";
 
 const tradeInRequestStatuses = [
   { value: "new", label: "Новая" },
@@ -37,8 +37,9 @@ export default async function AdminTradeInPage({ searchParams }: AdminTradeInPag
       }
     : {};
 
-  const [rules, totalCount, requests, marketingMode] = await Promise.all([
-    listTradeInRules(),
+  const [activeSnapshot, snapshots, totalCount, requests, marketingMode] = await Promise.all([
+    getActiveTradeInSnapshot(),
+    listTradeInSnapshots(),
     prisma.tradeInRequest.count({ where: searchWhere }),
     prisma.tradeInRequest.findMany({
       where: searchWhere,
@@ -50,89 +51,100 @@ export default async function AdminTradeInPage({ searchParams }: AdminTradeInPag
   ]);
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const answerSummaryByRequestId: Record<string, ReturnType<typeof summarizeTradeInAnswers>> = activeSnapshot
+    ? Object.fromEntries(
+        requests.map((request) => {
+          const parsedAnswers = request.categoryCode && request.answersJson && typeof request.answersJson === "object" && !Array.isArray(request.answersJson)
+            ? Object.fromEntries(
+                Object.entries(request.answersJson)
+                  .filter(([, value]) => typeof value === "string")
+                  .map(([key, value]) => [key, String(value)]),
+              )
+            : {};
+
+          return [
+            request.id,
+            request.categoryCode ? summarizeTradeInAnswers(activeSnapshot, request.categoryCode, parsedAnswers) : [],
+          ];
+        }),
+      ) as Record<string, ReturnType<typeof summarizeTradeInAnswers>>
+    : {};
 
   return (
     <main>
       <section className="hero glass">
         <div className="section-label">Trade-in</div>
-        <h1>Редактирование матрицы оценки без изменения кода.</h1>
+        <h1>Snapshot-оценка из DamProdam без ручного редактирования правил.</h1>
         <p>
-          Это критично для гибкости магазина: менеджер меняет цену в админке, а калькулятор на
-          витрине сразу читает активную матрицу из того же источника.
+          Локальный ProstorTradeInBot работает от активного snapshot. Здесь та же модель: обновляете snapshot,
+          а витрина и заявки сразу читают актуальный wizard и live-оценку.
         </p>
       </section>
 
       <section style={{ marginTop: 18 }} className="card glass admin-form-card">
-        <div className="section-label">Добавить или обновить правило</div>
-        <form action={upsertTradeInRuleAction} className="form-grid">
-          <label className="field">
-            <span>Бренд</span>
-            <input name="brand" type="text" placeholder="Apple" required />
-          </label>
-          <label className="field">
-            <span>Модель</span>
-            <input name="model" type="text" placeholder="iPhone 15 Pro" required />
-          </label>
-          <label className="field">
-            <span>Память</span>
-            <input name="storage" type="text" placeholder="256 ГБ" />
-          </label>
-          <label className="field">
-            <span>Состояние</span>
-            <select name="condition" defaultValue={tradeInConditions[0]?.value}>
-              {tradeInConditions.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>Цена</span>
-            <input name="price" type="number" min="1" step="1" placeholder="54000" required />
-          </label>
+        <div className="section-label">Обновить snapshot</div>
+        <form action={refreshTradeInSnapshotAction} className="form-grid">
+          <div className="muted field-wide">
+            Источник: DamProdam API. Поддерживаются категории iPhone, MacBook/iMac, Samsung, iPad и Apple Watch.
+          </div>
           <div className="actions field-wide">
             <button className="button button-primary" type="submit">
-              Сохранить правило
+              Обновить snapshot из DamProdam
             </button>
           </div>
         </form>
       </section>
 
-      <section style={{ marginTop: 18 }} className="card glass">
-        <div className="section-label">Активные правила</div>
-        <div className="admin-table">
-          <div className="admin-table-row admin-table-head">
-            <div>Устройство</div>
-            <div>Память</div>
-            <div>Состояние</div>
-            <div>Цена</div>
-            <div>Действия</div>
+      <section style={{ marginTop: 18 }} className="grid grid-2">
+        <article className="card glass">
+          <div className="section-label">Активный snapshot</div>
+          <div className="stat">{activeSnapshot?.version ?? "—"}</div>
+          <p>
+            {activeSnapshot
+              ? `${activeSnapshot.categories.length} категорий • ${activeSnapshot.categories.reduce<number>((total, category) => total + category.models.length, 0)} моделей • ${activeSnapshot.categories.reduce<number>((total, category) => total + category.questions.length, 0)} вопросов.`
+              : "Активный snapshot еще не загружен."}
+          </p>
+        </article>
+        <article className="card glass">
+          <div className="section-label">История snapshot</div>
+          <div className="grid">
+            {snapshots.length === 0 ? <p>История snapshot пока пуста.</p> : null}
+            {snapshots.map((snapshot) => (
+              <div key={snapshot.id} className="pill">
+                v{snapshot.version} • {snapshot.sourceName} • {snapshot.status} • {snapshot.categories.length} категорий
+              </div>
+            ))}
           </div>
-          {rules.map((rule) => (
-            <div key={`${rule.brand}-${rule.model}-${rule.storage}-${rule.condition}`} className="admin-table-row">
-              <div>
-                <strong>{rule.brand}</strong>
-                <div className="muted">{rule.model}</div>
-              </div>
-              <div>{rule.storage ?? "-"}</div>
-              <div>{tradeInConditions.find((item) => item.value === rule.condition)?.label ?? rule.condition}</div>
-              <div>{rule.price.toLocaleString("ru-RU")} ₽</div>
-              <div className="actions">
-                <form action={deleteTradeInRuleAction}>
-                  <input type="hidden" name="brand" value={rule.brand} />
-                  <input type="hidden" name="model" value={rule.model} />
-                  <input type="hidden" name="storage" value={rule.storage ?? ""} />
-                  <input type="hidden" name="condition" value={rule.condition} />
-                  <ConfirmButton message={`Удалить правило ${rule.brand} ${rule.model}?`}>
-                    Удалить
-                  </ConfirmButton>
-                </form>
-              </div>
-            </div>
-          ))}
-        </div>
+        </article>
       </section>
+
+      {activeSnapshot ? (
+        <section style={{ marginTop: 18 }} className="card glass">
+          <div className="section-label">Категории и wizard</div>
+          <div className="admin-table">
+            <div className="admin-table-row admin-table-head">
+              <div>Категория</div>
+              <div>Модели</div>
+              <div>Вопросы</div>
+              <div>Источник</div>
+            </div>
+            {activeSnapshot.categories.map((category) => (
+              <div key={category.id ?? category.categoryCode} className="admin-table-row">
+                <div>
+                  <strong>{category.title}</strong>
+                  <div className="muted">{category.categoryCode}</div>
+                </div>
+                <div>{category.models.length}</div>
+                <div>
+                  {category.questions.length}
+                  <div className="muted">{category.questions.map((question) => question.title).slice(0, 3).join(" • ")}</div>
+                </div>
+                <div>{activeSnapshot.sourceName}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section style={{ marginTop: 18 }} className="card glass">
         <div className="section-label">Последние заявки Trade-in ({totalCount})</div>
@@ -156,6 +168,17 @@ export default async function AdminTradeInPage({ searchParams }: AdminTradeInPag
                 <strong>{request.brand}</strong>
                 <div className="muted">{request.model}</div>
                 <div className="muted">{request.storage ?? "-"} • {tradeInConditions.find((item) => item.value === request.condition)?.label ?? request.condition}</div>
+                {request.categoryCode ? <div className="muted">Категория: {request.categoryCode}</div> : null}
+                {answerSummaryByRequestId[request.id]?.length ? (
+                  <div className="trade-in-admin-answer-list">
+                    {(answerSummaryByRequestId[request.id] ?? []).map((item) => (
+                      <div key={`${request.id}-${item.code}`} className="trade-in-admin-answer-item">
+                        <span>{item.title}</span>
+                        <strong>{item.value}</strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 {request.note ? <div className="muted">{request.note}</div> : null}
               </div>
               <div>{Number(request.quote).toLocaleString("ru-RU")} ₽</div>

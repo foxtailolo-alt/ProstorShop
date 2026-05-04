@@ -8,6 +8,7 @@ import { getAttributionSnapshot } from "../../../lib/attribution";
 import { parseProductOptions, resolveVariantSelection } from "../../../lib/cart-selection";
 import { addCartItem, buildCartItemKey, clearCart, getCartItems, removeCartItem, updateCartItem } from "../../../lib/cart";
 import { clearAppliedPromoCode, getAppliedPromoCode, getPromoCodeSummary, setAppliedPromoCode } from "../../../lib/promo";
+import { resolveProductPrice } from "../../../lib/pricing";
 
 export async function addToCartAction(formData: FormData) {
   const productSlug = String(formData.get("productSlug") ?? "").trim();
@@ -21,18 +22,36 @@ export async function addToCartAction(formData: FormData) {
 
   const product = await prisma.product.findUnique({
     where: { slug: productSlug },
-    select: { price: true, options: true },
+    select: {
+      price: true,
+      options: true,
+      discountType: true,
+      discountValue: true,
+      discountStartsAt: true,
+      discountEndsAt: true,
+    },
   });
 
   if (!product) {
     throw new Error("Product was not found.");
   }
 
-  const resolvedSelection = resolveVariantSelection(
+  const rawSelection = resolveVariantSelection(
     Number(product.price),
     parseProductOptions(product.options),
     requestedVariant,
   );
+
+  const resolvedSelection = {
+    variantLabel: rawSelection.variantLabel,
+    unitPrice: resolveProductPrice({
+      basePrice: rawSelection.unitPrice,
+      discountType: product.discountType,
+      discountValue: product.discountValue ? Number(product.discountValue) : null,
+      discountStartsAt: product.discountStartsAt,
+      discountEndsAt: product.discountEndsAt,
+    }).price,
+  };
 
   await addCartItem({
     productSlug,
@@ -158,12 +177,23 @@ export async function submitOrderAction(formData: FormData) {
       throw new Error("Product not found.");
     }
 
-    const resolvedSelection = item.unitPrice > 0
+    const rawSelection = item.unitPrice > 0
       ? {
           variantLabel: item.variantLabel,
           unitPrice: item.unitPrice,
         }
       : resolveVariantSelection(Number(product.price), parseProductOptions(product.options), item.variantLabel ?? "");
+
+    const resolvedSelection = {
+      variantLabel: rawSelection.variantLabel,
+      unitPrice: resolveProductPrice({
+        basePrice: rawSelection.unitPrice,
+        discountType: product.discountType,
+        discountValue: product.discountValue ? Number(product.discountValue) : null,
+        discountStartsAt: product.discountStartsAt,
+        discountEndsAt: product.discountEndsAt,
+      }).price,
+    };
 
     return {
       productId: product.id,

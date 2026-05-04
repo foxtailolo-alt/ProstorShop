@@ -155,6 +155,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 options={productOptions}
                 basePrice={currentProduct.price}
                 compareAtPrice={currentProduct.compareAtPrice}
+                discountType={currentProduct.discountType}
+                discountValue={currentProduct.discountValue}
+                discountEndsAt={currentProduct.discountEndsAt}
                 badge={currentProduct.badge}
                 inStock={currentProduct.inStock}
                 slug={currentProduct.slug}

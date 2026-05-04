@@ -82,6 +82,10 @@ model Product {
   specs       Json?
   options     Json?
   price       Decimal          @db.Decimal(10, 2)
+  discountType String?
+  discountValue Decimal?       @db.Decimal(10, 2)
+  discountStartsAt DateTime?
+  discountEndsAt DateTime?
   inStock     Boolean          @default(true)
   categoryId  String
   category    Category         @relation(fields: [categoryId], references: [id])
@@ -207,21 +211,102 @@ model TradeInRule {
   updatedAt  DateTime @updatedAt
 }
 
+model TradeInSnapshot {
+  id          String                  @id @default(cuid())
+  version     Int                     @unique
+  sourceName  String
+  pricingCity String                  @default("moscow")
+  status      String                  @default("draft")
+  importedAt  DateTime?
+  categories  TradeInSnapshotCategory[]
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@index([status])
+}
+
+model TradeInSnapshotCategory {
+  id           String                   @id @default(cuid())
+  snapshotId   String
+  snapshot     TradeInSnapshot          @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  categoryCode String
+  title        String
+  isEnabled    Boolean                  @default(true)
+  sortOrder    Int                      @default(0)
+  models       TradeInSnapshotModel[]
+  questions    TradeInSnapshotQuestion[]
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+
+  @@unique([snapshotId, categoryCode])
+}
+
+model TradeInSnapshotModel {
+  id         String                  @id @default(cuid())
+  categoryId String
+  category   TradeInSnapshotCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  code       String
+  title      String
+  metadata   Json
+  sortOrder  Int                     @default(0)
+  isEnabled  Boolean                 @default(true)
+  createdAt  DateTime                @default(now())
+  updatedAt  DateTime                @updatedAt
+
+  @@unique([categoryId, code])
+}
+
+model TradeInSnapshotQuestion {
+  id             String                    @id @default(cuid())
+  categoryId     String
+  category       TradeInSnapshotCategory   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  code           String
+  title          String
+  stepIndex      Int
+  questionKind   String                    @default("single_select")
+  branchingRules Json
+  isRequired     Boolean                   @default(true)
+  options        TradeInSnapshotOption[]
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  @@unique([categoryId, code])
+}
+
+model TradeInSnapshotOption {
+  id             String                  @id @default(cuid())
+  questionId     String
+  question       TradeInSnapshotQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  code           String
+  title          String
+  pricingPayload Json
+  sortOrder      Int                     @default(0)
+  isEnabled      Boolean                 @default(true)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@unique([questionId, code])
+}
+
 model TradeInRequest {
-  id         String   @id @default(cuid())
-  userId     String?
-  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id                String   @id @default(cuid())
+  userId            String?
+  user              User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   customerName String
-  phone      String
-  brand      String
-  model      String
-  storage    String?
-  condition  String
-  quote      Decimal  @db.Decimal(10, 2)
-  note       String?
-  attribution Json?
-  status     String   @default("new")
-  createdAt  DateTime @default(now())
+  phone             String
+  brand             String
+  model             String
+  storage           String?
+  condition         String
+  snapshotVersion   Int?
+  categoryCode      String?
+  deviceModelCode   String?
+  answersJson       Json?
+  quote             Decimal  @db.Decimal(10, 2)
+  note              String?
+  attribution       Json?
+  status            String   @default("new")
+  createdAt         DateTime @default(now())
 }
 
 model ServicePriceTable {
@@ -243,20 +328,86 @@ model ServicePriceRow {
   price       Decimal           @db.Decimal(10, 2)
 }
 
+model ServiceCatalogService {
+  id          String                @id @default(cuid())
+  slug        String                @unique
+  name        String
+  description String
+  sortOrder   Int                   @default(0)
+  isActive    Boolean               @default(true)
+  models      ServiceCatalogModel[]
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+}
+
+model ServiceCatalogModel {
+  id        String                 @id @default(cuid())
+  serviceId String
+  service   ServiceCatalogService  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  slug      String
+  brand     String
+  name      String
+  sortOrder Int                    @default(0)
+  isActive  Boolean                @default(true)
+  variants  ServiceCatalogVariant[]
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+
+  @@unique([serviceId, slug])
+  @@index([brand, name])
+}
+
+model ServiceCatalogVariant {
+  id                 String               @id @default(cuid())
+  modelId            String
+  model              ServiceCatalogModel  @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  slug               String
+  name               String
+  description        String
+  sourceKinds        Json
+  metadata           Json
+  sortOrder          Int                  @default(0)
+  partPrice          Decimal              @db.Decimal(10, 2)
+  laborPrice         Decimal              @db.Decimal(10, 2)
+  totalPrice         Decimal              @db.Decimal(10, 2)
+  currency           String               @default("RUB")
+  sourceFile         String
+  sourceLabel        String
+  isActive           Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@unique([modelId, slug])
+}
+
+model ServiceCatalogImportLog {
+  id         String   @id @default(cuid())
+  sourceFile String
+  summary    Json
+  createdAt  DateTime @default(now())
+}
+
 model ServiceRequest {
-  id          String   @id @default(cuid())
-  userId      String?
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id                 String   @id @default(cuid())
+  userId             String?
+  user               User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   customerName String
-  phone       String
-  brand       String
-  model       String
-  repairType  String
-  quote       Decimal  @db.Decimal(10, 2)
-  note        String?
-  attribution Json?
-  status      String   @default("new")
-  createdAt   DateTime @default(now())
+  phone              String
+  brand              String
+  model              String
+  repairType         String
+  serviceSlug        String?
+  variantId          String?
+  variantName        String?
+  variantDescription String?
+  partPrice          Decimal? @db.Decimal(10, 2)
+  laborPrice         Decimal? @db.Decimal(10, 2)
+  currency           String?
+  quote              Decimal  @db.Decimal(10, 2)
+  note               String?
+  attribution        Json?
+  status             String   @default("new")
+  createdAt          DateTime @default(now())
 }
 
 model TelegramPost {

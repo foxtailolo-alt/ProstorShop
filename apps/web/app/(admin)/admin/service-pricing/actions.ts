@@ -1,69 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@prostor/db";
-import * as XLSX from "xlsx";
+import { prisma, type Prisma } from "@prostor/db";
 import { logAdminActivity } from "../../../../lib/audit";
+import { parseServiceCatalogWorkbook } from "../../../../lib/service-catalog";
 import { requirePermission } from "../../../../lib/auth/session";
 
 const serviceRequestStatuses = new Set(["new", "contacted", "accepted", "completed", "cancelled"]);
 
-type ParsedServiceRow = {
-  brand: string;
-  model: string;
-  repairType: string;
-  price: number;
-};
-
-function normalizeKey(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function parseRows(buffer: Buffer, fileName: string) {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
-  const firstSheetName = workbook.SheetNames[0];
-
-  if (!firstSheetName) {
-    throw new Error("Пустой файл прайса.");
-  }
-
-  const sheet = workbook.Sheets[firstSheetName];
-
-  if (!sheet) {
-    throw new Error("Пустой файл прайса.");
-  }
-
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-
-  const parsedRows = rows
-    .map<ParsedServiceRow | null>((row) => {
-      const normalizedEntries = Object.fromEntries(
-        Object.entries(row).map(([key, value]) => [normalizeKey(key), String(value).trim()]),
-      );
-
-      const brand = normalizedEntries.brand || normalizedEntries["бренд"];
-      const model = normalizedEntries.model || normalizedEntries["модель"];
-      const repairType = normalizedEntries.repairtype || normalizedEntries["repair type"] || normalizedEntries["ремонт"] || normalizedEntries["тип ремонта"];
-      const priceValue = normalizedEntries.price || normalizedEntries["цена"];
-      const price = Number(String(priceValue).replace(/\s/g, "").replace(",", "."));
-
-      if (!brand || !model || !repairType || !Number.isFinite(price) || price <= 0) {
-        return null;
-      }
-
-      return { brand, model, repairType, price };
-    })
-    .filter((row): row is ParsedServiceRow => Boolean(row));
-
-  if (parsedRows.length === 0) {
-    throw new Error(`Не удалось разобрать строки в ${fileName}. Нужны колонки brand/model/repairType/price.`);
-  }
-
-  return parsedRows;
-}
-
 export async function importServicePricingAction(formData: FormData) {
-  await requirePermission("service", "write");
+  const session = await requirePermission("service", "write");
   const file = formData.get("priceFile");
 
   if (!(file instanceof File) || file.size === 0) {
@@ -71,45 +17,141 @@ export async function importServicePricingAction(formData: FormData) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const parsedRows = parseRows(buffer, file.name);
-  const latestTable = await prisma.servicePriceTable.findFirst({
-    orderBy: { version: "desc" },
-  });
-
-  const nextVersion = (latestTable?.version ?? 0) + 1;
+  const parsed = parseServiceCatalogWorkbook(buffer, file.name);
 
   await prisma.$transaction(async (transaction) => {
-    await transaction.servicePriceTable.updateMany({
-      data: { isActive: false },
-    });
+    await transaction.serviceCatalogVariant.updateMany({ data: { isActive: false } });
+    await transaction.serviceCatalogModel.updateMany({ data: { isActive: false } });
+    await transaction.serviceCatalogService.updateMany({ data: { isActive: false } });
 
-    const table = await transaction.servicePriceTable.create({
+    const serviceIds = new Map<string, string>();
+    const modelIds = new Map<string, string>();
+
+    for (const record of parsed.records) {
+      if (!serviceIds.has(record.serviceSlug)) {
+        const service = await transaction.serviceCatalogService.upsert({
+          where: { slug: record.serviceSlug },
+          update: {
+            name: record.serviceName,
+            description: record.serviceDescription,
+            sortOrder: record.serviceSortOrder,
+            isActive: true,
+          },
+          create: {
+            slug: record.serviceSlug,
+            name: record.serviceName,
+            description: record.serviceDescription,
+            sortOrder: record.serviceSortOrder,
+            isActive: true,
+          },
+        });
+
+        serviceIds.set(record.serviceSlug, service.id);
+      }
+
+      const serviceId = serviceIds.get(record.serviceSlug);
+      if (!serviceId) {
+        throw new Error(`Не удалось создать сервис ${record.serviceSlug}.`);
+      }
+
+      const modelKey = `${record.serviceSlug}::${record.modelSlug}`;
+      if (!modelIds.has(modelKey)) {
+        const model = await transaction.serviceCatalogModel.upsert({
+          where: {
+            serviceId_slug: {
+              serviceId,
+              slug: record.modelSlug,
+            },
+          },
+          update: {
+            brand: record.brand,
+            name: record.modelName,
+            sortOrder: record.modelSortOrder,
+            isActive: true,
+          },
+          create: {
+            serviceId,
+            slug: record.modelSlug,
+            brand: record.brand,
+            name: record.modelName,
+            sortOrder: record.modelSortOrder,
+            isActive: true,
+          },
+        });
+
+        modelIds.set(modelKey, model.id);
+      }
+
+      const modelId = modelIds.get(modelKey);
+      if (!modelId) {
+        throw new Error(`Не удалось создать модель ${record.modelName}.`);
+      }
+
+      await transaction.serviceCatalogVariant.upsert({
+        where: {
+          modelId_slug: {
+            modelId,
+            slug: record.variantSlug,
+          },
+        },
+        update: {
+          name: record.variantName,
+          description: record.variantDescription,
+          sourceKinds: record.sourceKinds,
+          metadata: record.metadata as Prisma.InputJsonValue,
+          sortOrder: record.variantSortOrder,
+          partPrice: record.partPrice,
+          laborPrice: record.laborPrice,
+          totalPrice: record.totalPrice,
+          currency: record.currency,
+          sourceFile: record.sourceFile,
+          sourceLabel: record.sourceLabel,
+          isActive: true,
+        },
+        create: {
+          modelId,
+          slug: record.variantSlug,
+          name: record.variantName,
+          description: record.variantDescription,
+          sourceKinds: record.sourceKinds,
+          metadata: record.metadata as Prisma.InputJsonValue,
+          sortOrder: record.variantSortOrder,
+          partPrice: record.partPrice,
+          laborPrice: record.laborPrice,
+          totalPrice: record.totalPrice,
+          currency: record.currency,
+          sourceFile: record.sourceFile,
+          sourceLabel: record.sourceLabel,
+          isActive: true,
+        },
+      });
+    }
+
+    await transaction.serviceCatalogImportLog.create({
       data: {
-        version: nextVersion,
         sourceFile: file.name,
-        isActive: true,
+        summary: {
+          rowsRead: parsed.rowsRead,
+          normalizedRows: parsed.normalizedRows,
+          warnings: parsed.warnings,
+          importedByUserId: session.user.id,
+        },
       },
     });
-
-    await transaction.servicePriceRow.createMany({
-      data: parsedRows.map((row) => ({
-        tableId: table.id,
-        brand: row.brand,
-        model: row.model,
-        repairType: row.repairType,
-        price: row.price,
-      })),
-    });
+  }, {
+    maxWait: 10_000,
+    timeout: 120_000,
   });
 
   await logAdminActivity({
-    entityType: "service-price-table",
+    entityType: "service-catalog-import",
     action: "service.pricing.imported",
-    summary: `Импортирован прайс ${file.name} с ${parsedRows.length} строками.`,
+    summary: `Импортирован сервисный прайс ${file.name} с ${parsed.normalizedRows} вариантами.`,
     metadata: {
       fileName: file.name,
-      rows: parsedRows.length,
-      version: nextVersion,
+      rowsRead: parsed.rowsRead,
+      normalizedRows: parsed.normalizedRows,
+      warnings: parsed.warnings,
     },
   });
 

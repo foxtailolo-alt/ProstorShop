@@ -24,6 +24,18 @@ type OptionGroup = {
   values: string[];
 };
 
+type RawOptionGroup = {
+  name: string;
+  labels: string[];
+  selectOptions: string[];
+};
+
+type RawProductState = {
+  title: string;
+  price: string;
+  groups: RawOptionGroup[];
+};
+
 type ScrapedVariant = {
   selections: Record<string, string>;
   price: number;
@@ -58,16 +70,16 @@ const COMPETITOR_SITEMAP_URL = "https://resale52.ru/sitemap-store.xml";
 const PAGE_TIMEOUT_MS = 90_000;
 
 const COLOR_ALIASES: Record<string, string[]> = {
-  black: ["black", "черный", "чёрный", "chernyy", "темный", "space black", "graphite", "midnight"],
-  white: ["white", "белый", "belyy", "silver", "серебристый", "серебрянный", "serebryannyy", "serebristyj", "starlight", "сияющая звезда"],
-  blue: ["blue", "sky blue", "deep blue", "голубой", "goluboy", "синий", "ultramarine", "navy", "indigo", "индиго"],
-  green: ["green", "зеленый", "зелёный", "teal", "mint", "мятный"],
-  yellow: ["yellow", "желтый", "жёлтый", "citrus", "цитрусовый"],
-  pink: ["pink", "розовый", "blush"],
-  purple: ["purple", "фиолетовый", "lavender"],
-  orange: ["orange", "оранжевый", "cosmic orange"],
-  beige: ["beige", "бежевый", "bezhevyy"],
-  gray: ["gray", "grey", "серый", "space gray", "титановый"],
+  black: ["black", "черный", "чёрный", "черные", "чёрные", "chernyy", "chernye", "темный", "space black", "graphite", "midnight"],
+  white: ["white", "белый", "белые", "belyy", "belye", "starlight", "сияющая звезда"],
+  blue: ["blue", "sky blue", "deep blue", "mist blue", "голубой", "goluboy", "синий", "siniy", "sinii", "ultramarine", "navy", "indigo", "индиго"],
+  green: ["green", "зеленый", "зелёный", "zelenyy", "zeleniy", "teal", "mint", "мятный", "olive", "lime", "лаймовый", "laymovyy", "laymoviy", "sage"],
+  yellow: ["yellow", "желтый", "жёлтый", "zheltyy", "zheltiy", "citrus", "цитрусовый"],
+  pink: ["pink", "розовый", "rozovyy", "rozoviy", "blush"],
+  purple: ["purple", "violet", "cobalt violet", "фиолетовый", "fioletovyy", "fioletoviy", "lavender", "лавандовый", "lavandovyy", "lavandoviy"],
+  orange: ["orange", "оранжевый", "oranzhevyy", "oranzheviy", "cosmic orange", "coral", "коралловый", "korallovyy", "koralloviy"],
+  beige: ["beige", "бежевый", "bezhevyy", "bezheviy"],
+  gray: ["gray", "grey", "серый", "серые", "seryy", "seriy", "serye", "space gray", "light gray", "титановый", "silver", "серебристый", "серебристые", "серебрянный", "serebryannyy", "serebristyy", "serebristyj", "serebristye"],
 };
 
 const COLOR_SUFFIX_ALIASES = uniqueValues(
@@ -80,7 +92,8 @@ function normalizeComparableText(value: string) {
   return value
     .toLowerCase()
     .replace(/ё/g, "е")
-    .replace(/[+/,()]+/g, " ")
+    .replace(/\+/g, " plus ")
+    .replace(/[\/,()]+/g, " ")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
     .replace(/\s+/g, " ");
@@ -116,6 +129,41 @@ function stripTrailingColorSuffix(value: string, separator: " " | "-") {
   return normalizedValue;
 }
 
+function stripTrailingDuplicateSuffix(value: string, separator: " " | "-") {
+  return value.replace(new RegExp(`\\${separator}\\d+$`), "");
+}
+
+function stripWatchVariantSuffix(value: string, separator: " " | "-") {
+  return value
+    .replace(new RegExp(`\\${separator}\\d+mm(?=\\${separator}|$)`, "g"), "")
+    .replace(new RegExp(`\\${separator}(lte|bluetooth)(?=\\${separator}|$)`, "g"), "")
+    .replace(new RegExp(`\\${separator}+`, "g"), separator)
+    .replace(new RegExp(`^\\${separator}|\\${separator}$`, "g"), "");
+}
+
+function stripIpadDisplaySizeToken(value: string, separator: " " | "-") {
+  const prefixPattern = new RegExp(`^(apple\\${separator})?ipad\\${separator}(air|pro)\\${separator}`, "i");
+  if (!prefixPattern.test(value)) {
+    return value;
+  }
+
+  return value
+    .replace(new RegExp(`\\${separator}(11|13)(?=\\${separator}m\\d)`, "gi"), "")
+    .replace(new RegExp(`\\${separator}+`, "g"), separator)
+    .replace(new RegExp(`^\\${separator}|\\${separator}$`, "g"), "");
+}
+
+function expandCompetitorSlugPatterns(value: string) {
+  const normalizedValue = value.trim();
+  const variants = new Set<string>([normalizedValue]);
+
+  if (normalizedValue) {
+    variants.add(normalizedValue.replace(/(^|-)s(\d{2})(?=-|$)/g, "$1s-$2"));
+  }
+
+  return [...variants].filter(Boolean);
+}
+
 function parseRubPrice(value: string) {
   const numericValue = Number(String(value).replace(/[^\d]+/g, ""));
 
@@ -128,6 +176,15 @@ function parseRubPrice(value: string) {
 
 function uniqueValues(values: string[]) {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+export function normalizeScrapedOptionGroups(groups: RawOptionGroup[]): OptionGroup[] {
+  return groups
+    .map((group) => ({
+      name: group.name.trim(),
+      values: uniqueValues([...group.labels, ...group.selectOptions]),
+    }))
+    .filter((group) => group.name && group.values.length > 0);
 }
 
 function cartesianProduct(groups: OptionGroup[]) {
@@ -176,11 +233,24 @@ function countCurrentVariants(options: unknown) {
 
 function canonicalizeColor(value: string) {
   const normalized = normalizeComparableText(value);
+  const matchedCanonicals = new Set<string>();
 
   for (const [canonical, aliases] of Object.entries(COLOR_ALIASES)) {
-    if (aliases.some((alias) => normalizeComparableText(alias) === normalized)) {
-      return canonical;
+    for (const alias of aliases) {
+      const normalizedAlias = normalizeComparableText(alias);
+
+      if (normalizedAlias === normalized) {
+        return canonical;
+      }
+
+      if (` ${normalized} `.includes(` ${normalizedAlias} `)) {
+        matchedCanonicals.add(canonical);
+      }
     }
+  }
+
+  if (matchedCanonicals.size === 1) {
+    return [...matchedCanonicals][0] ?? null;
   }
 
   return null;
@@ -194,22 +264,40 @@ function isStorageGroup(group: OptionGroup) {
   return group.values.every((value) => /\d/.test(value));
 }
 
-function matchesOptionValue(localText: string, value: string, group: OptionGroup) {
-  const normalizedLocalText = normalizeComparableText(localText);
+function groupHasCanonicalColor(group: OptionGroup, canonical: string) {
+  return group.values.some((value) => canonicalizeColor(value) === canonical);
+}
 
+function textMatchesCanonicalColor(localText: string, canonical: string) {
+  const normalizedLocalText = normalizeComparableText(localText);
+  const aliases = COLOR_ALIASES[canonical] ?? [];
+
+  return aliases.some((alias) => ` ${normalizedLocalText} `.includes(` ${normalizeComparableText(alias)} `));
+}
+
+function matchesOptionValue(localText: string, value: string, group: OptionGroup) {
   if (isColorGroup(group)) {
     const candidate = canonicalizeColor(value);
     if (!candidate) {
       return false;
     }
 
-    const aliases = COLOR_ALIASES[candidate] ?? [];
-    return aliases.some((alias) => ` ${normalizedLocalText} `.includes(` ${normalizeComparableText(alias)} `));
+    if (textMatchesCanonicalColor(localText, candidate)) {
+      return true;
+    }
+
+    if (candidate === "purple" && !groupHasCanonicalColor(group, "pink") && textMatchesCanonicalColor(localText, "pink")) {
+      return true;
+    }
+
+    return false;
   }
 
   if (isStorageGroup(group)) {
     return normalizeStorageValue(localText).includes(normalizeStorageValue(value));
   }
+
+  const normalizedLocalText = normalizeComparableText(localText);
 
   return ` ${normalizedLocalText} `.includes(` ${normalizeComparableText(value)} `);
 }
@@ -220,6 +308,7 @@ function buildProductCandidateKeys(product: LocalProductRecord) {
   const normalizedName = stripTrailingColorSuffix(
     normalizeComparableText(product.name)
     .replace(/^apple\s+/g, "")
+      .replace(/^samsung\s+galaxy\s+/g, "")
     .replace(/^samsung\s+/g, "")
     .trim(),
     " ",
@@ -238,12 +327,30 @@ function buildProductCandidateKeys(product: LocalProductRecord) {
       continue;
     }
 
-    candidates.add(variant);
-    candidates.add(stripTrailingColorSuffix(variant, "-"));
+    const withoutDuplicateSuffix = stripTrailingDuplicateSuffix(variant, "-");
+    const withoutColorSuffix = stripTrailingColorSuffix(withoutDuplicateSuffix, "-");
+    const withoutWatchVariantSuffix = stripWatchVariantSuffix(withoutColorSuffix, "-");
+    const withoutIpadDisplaySize = stripIpadDisplaySizeToken(withoutWatchVariantSuffix, "-");
+
+    for (const candidate of [withoutDuplicateSuffix, withoutColorSuffix, withoutWatchVariantSuffix, withoutIpadDisplaySize]) {
+      for (const expanded of expandCompetitorSlugPatterns(candidate)) {
+        candidates.add(expanded);
+      }
+    }
   }
 
   if (normalizedName) {
-    candidates.add(toSlugToken(normalizedName));
+    const nameToken = stripIpadDisplaySizeToken(stripWatchVariantSuffix(toSlugToken(normalizedName), "-"), "-");
+
+    for (const expanded of expandCompetitorSlugPatterns(nameToken)) {
+      candidates.add(expanded);
+    }
+
+    if (product.brand.toLowerCase() === "samsung") {
+      for (const expanded of expandCompetitorSlugPatterns(`samsung-${nameToken}`)) {
+        candidates.add(expanded);
+      }
+    }
   }
 
   return [...candidates]
@@ -254,7 +361,7 @@ function buildProductCandidateKeys(product: LocalProductRecord) {
 function isBrandCompatible(url: string, brand: string) {
   const normalizedBrand = brand.toLowerCase();
   if (normalizedBrand === "samsung") {
-    return url.includes("/samsung/");
+    return url.includes("/samsung/") || url.includes("/samsung-watch/");
   }
 
   if (normalizedBrand === "apple") {
@@ -319,8 +426,8 @@ async function launchCompetitorBrowser() {
   }
 }
 
-async function readProductState(page: Page) {
-  return page.evaluate(() => {
+async function readProductState(page: Page): Promise<{ title: string; price: string; groups: OptionGroup[] }> {
+  const state: RawProductState = await page.evaluate(() => {
     const normalize = (value: string | null | undefined) =>
       String(value ?? "")
         .replace(/\s+/g, " ")
@@ -339,12 +446,16 @@ async function readProductState(page: Page) {
       const labels = [...groupNode.querySelectorAll("label")]
         .map((label) => normalize(label.textContent))
         .filter(Boolean);
+      const selectOptions = [...groupNode.querySelectorAll("option")]
+        .map((option) => normalize(option.textContent))
+        .filter(Boolean);
 
       return {
         name: groupName,
-        values: [...new Set(labels)],
+        labels,
+        selectOptions,
       };
-    }).filter((group) => group.name && group.values.length > 0);
+    });
 
     return {
       title: normalize(root.querySelector(".js-product-name")?.textContent),
@@ -352,6 +463,12 @@ async function readProductState(page: Page) {
       groups,
     };
   });
+
+  return {
+    title: state.title,
+    price: state.price,
+    groups: normalizeScrapedOptionGroups(state.groups),
+  };
 }
 
 async function clickOptionValue(page: Page, groupName: string, value: string) {
@@ -375,15 +492,30 @@ async function clickOptionValue(page: Page, groupName: string, value: string) {
 
     const label = [...group.querySelectorAll("label")].find((labelNode) => normalize(labelNode.textContent) === normalize(value));
 
-    if (!(label instanceof HTMLElement)) {
-      throw new Error(`Competitor option value not found: ${groupName}=${value}`);
+    if (label instanceof HTMLElement) {
+      label.click();
+      const input = label.querySelector("input");
+      if (input instanceof HTMLInputElement) {
+        input.click();
+      }
+      return;
     }
 
-    label.click();
-    const input = label.querySelector("input");
-    if (input instanceof HTMLInputElement) {
-      input.click();
+    const select = group.querySelector("select");
+    if (select instanceof HTMLSelectElement) {
+      const option = [...select.options].find((optionNode) => normalize(optionNode.textContent) === normalize(value));
+
+      if (!option) {
+        throw new Error(`Competitor option value not found: ${groupName}=${value}`);
+      }
+
+      select.value = option.value;
+      select.dispatchEvent(new Event("input", { bubbles: true }));
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
     }
+
+    throw new Error(`Competitor option value not found: ${groupName}=${value}`);
   }, { groupName, value });
 
   await page.waitForFunction(
@@ -405,9 +537,20 @@ async function clickOptionValue(page: Page, groupName: string, value: string) {
         return false;
       }
 
-      return [...group.querySelectorAll("label")].some(
+      const activeLabel = [...group.querySelectorAll("label")].some(
         (labelNode) => labelNode.classList.contains("t-product__option-item_active") && normalize(labelNode.textContent) === normalize(value),
       );
+      if (activeLabel) {
+        return true;
+      }
+
+      const select = group.querySelector("select");
+      if (select instanceof HTMLSelectElement) {
+        const selectedOption = select.selectedOptions.item(0);
+        return normalize(selectedOption?.textContent) === normalize(value);
+      }
+
+      return false;
     },
     { groupName, value },
     { timeout: 5_000 },
@@ -432,14 +575,19 @@ export async function scrapeCompetitorProduct(browser: Browser, url: string): Pr
           return false;
         }
 
-        return info.querySelectorAll(".js-product-edition-option").length > 0;
+        return info.querySelectorAll(".js-product-edition-option label, .js-product-edition-option option").length > 0;
       },
       undefined,
       { timeout: 8_000 },
     ).catch(() => undefined);
     await page.waitForTimeout(400);
 
-    const initialState = await readProductState(page);
+    let initialState = await readProductState(page);
+    for (let attempt = 0; initialState.groups.length === 0 && attempt < 5; attempt += 1) {
+      await page.waitForTimeout(400);
+      initialState = await readProductState(page);
+    }
+
     const groups = initialState.groups.map((group) => ({
       name: group.name,
       values: uniqueValues(group.values),

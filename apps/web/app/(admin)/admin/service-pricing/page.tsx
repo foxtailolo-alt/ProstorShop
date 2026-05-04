@@ -1,4 +1,4 @@
-import { listServicePriceRows, listServicePriceVersions } from "../../../../lib/data/pricing";
+import { listServiceCatalogEntries, listServiceCatalogImports } from "../../../../lib/data/pricing";
 import { prisma } from "@prostor/db";
 import { isMarketingMode } from "../../../../lib/auth/marketing";
 import { AdminPagination, AdminSearch, PAGE_SIZE } from "../../../../components/admin/admin-pagination";
@@ -31,13 +31,15 @@ export default async function AdminServicePricingPage({ searchParams }: AdminSer
           { phone: { contains: searchQuery, mode: "insensitive" as const } },
           { brand: { contains: searchQuery, mode: "insensitive" as const } },
           { model: { contains: searchQuery, mode: "insensitive" as const } },
+          { repairType: { contains: searchQuery, mode: "insensitive" as const } },
+          { variantName: { contains: searchQuery, mode: "insensitive" as const } },
         ],
       }
     : {};
 
-  const [rows, versions, totalCount, requests, marketingMode] = await Promise.all([
-    listServicePriceRows(),
-    listServicePriceVersions(),
+  const [rows, imports, totalCount, requests, marketingMode] = await Promise.all([
+    listServiceCatalogEntries(),
+    listServiceCatalogImports(),
     prisma.serviceRequest.count({ where: searchWhere }),
     prisma.serviceRequest.findMany({
       where: searchWhere,
@@ -49,27 +51,29 @@ export default async function AdminServicePricingPage({ searchParams }: AdminSer
   ]);
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const servicesCount = new Set(rows.map((row) => row.serviceSlug)).size;
+  const modelsCount = new Set(rows.map((row) => `${row.brand}::${row.modelSlug}`)).size;
 
   return (
     <main>
       <section className="hero glass">
         <div className="section-label">Прайс сервиса</div>
-        <h1>Импорт прайса ремонта из CSV или XLSX.</h1>
+        <h1>Импорт прайса ремонта из Excel.</h1>
         <p>
-          Активной становится только последняя загруженная версия. Витрина и калькулятор читают
-          тот же активный прайс без ручного дублирования.
+          Загрузите тот же Excel-прайс, который использовался в RepairProstorBot. Витрина сервиса
+          и заявки читают активный каталог без ручного дублирования.
         </p>
       </section>
 
       <section style={{ marginTop: 18 }} className="card glass admin-form-card">
         <div className="section-label">Загрузить новый прайс</div>
-        <form action={importServicePricingAction} className="grid" encType="multipart/form-data">
+        <form action={importServicePricingAction} className="grid">
           <label className="field">
-            <span>Файл CSV или XLSX</span>
-            <input name="priceFile" type="file" accept=".csv,.xlsx,.xls" required />
+            <span>Файл XLSX или XLS</span>
+            <input name="priceFile" type="file" accept=".xlsx,.xls" required />
           </label>
           <div className="muted">
-            Ожидаемые колонки: `brand`, `model`, `repairType`, `price` или русские аналоги.
+            Ожидаются листы <strong>Прайс АКБ</strong> и <strong>Прайс Крышки (копия)</strong> в формате текущего сервисного Excel.
           </div>
           <div className="actions">
             <button className="button button-primary" type="submit">
@@ -81,40 +85,49 @@ export default async function AdminServicePricingPage({ searchParams }: AdminSer
 
       <section style={{ marginTop: 18 }} className="grid grid-2">
         <article className="card glass">
-          <div className="section-label">Версии прайса</div>
+          <div className="section-label">Последние импорты</div>
           <div className="grid">
-            {versions.length === 0 ? <p>Пока используется seed-версия.</p> : null}
-            {versions.map((version) => (
-              <div key={version.id} className="pill">
-                v{version.version} • {version.sourceFile} • {version._count.rows} строк • {version.isActive ? "Активна" : "Архив"}
+            {imports.length === 0 ? <p>История импортов пока пуста.</p> : null}
+            {imports.map((item) => (
+              <div key={item.id} className="pill">
+                {item.sourceFile} • {item.createdAt.toLocaleString("ru-RU")}
               </div>
             ))}
           </div>
         </article>
         <article className="card glass">
-          <div className="section-label">Активный прайс</div>
+          <div className="section-label">Активный каталог</div>
           <div className="stat">{rows.length}</div>
-          <p>Строк в текущем пользовательском калькуляторе сервиса.</p>
+          <p>{servicesCount} услуг • {modelsCount} моделей • {rows.length} вариантов ремонта.</p>
         </article>
       </section>
 
       <section style={{ marginTop: 18 }} className="card glass">
-        <div className="section-label">Текущие строки</div>
+        <div className="section-label">Текущие варианты ремонта</div>
         <div className="admin-table">
           <div className="admin-table-row admin-table-head">
             <div>Бренд</div>
             <div>Модель</div>
-            <div>Ремонт</div>
+            <div>Услуга</div>
+            <div>Вариант</div>
             <div>Цена</div>
             <div>Источник</div>
           </div>
           {rows.map((row) => (
-            <div key={`${row.brand}-${row.model}-${row.repairType}`} className="admin-table-row">
+            <div key={row.variantId} className="admin-table-row">
               <div>{row.brand}</div>
-              <div>{row.model}</div>
-              <div>{row.repairType}</div>
-              <div>{row.price.toLocaleString("ru-RU")} ₽</div>
-              <div>Активная версия</div>
+              <div>{row.modelName}</div>
+              <div>{row.serviceName}</div>
+              <div>
+                <strong>{row.variantName}</strong>
+                <div className="muted">{row.variantDescription}</div>
+              </div>
+              <div>
+                <strong>{row.totalPrice.toLocaleString("ru-RU")} ₽</strong>
+                <div className="muted">Деталь: {row.partPrice.toLocaleString("ru-RU")} ₽</div>
+                <div className="muted">Работа: {row.laborPrice.toLocaleString("ru-RU")} ₽</div>
+              </div>
+              <div>{row.sourceFile}</div>
             </div>
           ))}
         </div>
@@ -142,9 +155,15 @@ export default async function AdminServicePricingPage({ searchParams }: AdminSer
                 <strong>{request.brand}</strong>
                 <div className="muted">{request.model}</div>
                 <div className="muted">{request.repairType}</div>
+                {request.variantName ? <div className="muted">Вариант: {request.variantName}</div> : null}
+                {request.variantDescription ? <div className="muted">{request.variantDescription}</div> : null}
                 {request.note ? <div className="muted">{request.note}</div> : null}
               </div>
-              <div>{Number(request.quote).toLocaleString("ru-RU")} ₽</div>
+              <div>
+                <strong>{Number(request.quote).toLocaleString("ru-RU")} ₽</strong>
+                {request.partPrice ? <div className="muted">Деталь: {Number(request.partPrice).toLocaleString("ru-RU")} ₽</div> : null}
+                {request.laborPrice ? <div className="muted">Работа: {Number(request.laborPrice).toLocaleString("ru-RU")} ₽</div> : null}
+              </div>
               <div>
                 <form action={updateServiceRequestStatusAction} className="form-grid">
                   <input type="hidden" name="requestId" value={request.id} />

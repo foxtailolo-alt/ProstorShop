@@ -4,6 +4,46 @@ type TelegramReplyMarkup = {
   inline_keyboard: Array<Array<{ text: string; url: string }>>;
 };
 
+type TelegramApiResponse = {
+  ok: boolean;
+  result?: { message_id: number };
+  description?: string;
+};
+
+async function buildTelegramPhotoUpload(imageUrl: string) {
+  const response = await fetch(imageUrl, {
+    headers: {
+      Accept: "image/*",
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to download Telegram image: ${response.status}.`);
+  }
+
+  const sharp = (await import("sharp")).default;
+  const inputBuffer = Buffer.from(await response.arrayBuffer());
+  const outputBuffer = await sharp(inputBuffer)
+    .rotate()
+    .jpeg({ quality: 92, mozjpeg: true })
+    .toBuffer();
+
+  const sourceName = (imageUrl
+    .split("?")[0] ?? "")
+    .split("/")
+    .at(-1) ?? "";
+  const normalizedName = sourceName
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^a-z0-9_-]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
+  return new File([new Uint8Array(outputBuffer)], `${normalizedName || "telegram-photo"}.jpg`, {
+    type: "image/jpeg",
+  });
+}
+
 function getRequiredEnv(name: string) {
   const value = process.env[name];
 
@@ -53,42 +93,50 @@ export async function sendTelegramPost(input: {
     inline_keyboard: [[{ text: input.buttonText, url: input.buttonUrl }]],
   };
 
-  const method = input.imageUrl ? "sendPhoto" : "sendMessage";
-  const requestPayload = input.imageUrl
-    ? {
-        chat_id: chatId,
-        photo: input.imageUrl,
-        caption: input.text,
-        reply_markup: replyMarkup,
-      }
-    : {
-        chat_id: chatId,
-        text: input.text,
-        reply_markup: replyMarkup,
-        disable_web_page_preview: false,
-      };
+  async function callTelegram(
+    method: "sendPhoto" | "sendMessage",
+    payload: BodyInit | Record<string, unknown>,
+    contentType?: string,
+  ) {
+    const body: BodyInit = contentType === "application/json"
+      ? JSON.stringify(payload)
+      : payload as BodyInit;
 
-  const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(requestPayload),
-  });
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
+      method: "POST",
+      headers: contentType
+        ? {
+            "Content-Type": contentType,
+          }
+        : undefined,
+      body,
+    });
 
-  if (!response.ok) {
-    throw new Error(`Telegram API responded with ${response.status}.`);
+    const responsePayload = (await response.json()) as TelegramApiResponse;
+
+    if (!response.ok || !responsePayload.ok || !responsePayload.result) {
+      throw new Error(responsePayload.description ?? `Telegram API responded with ${response.status}.`);
+    }
+
+    return responsePayload.result.message_id;
   }
 
-  const responsePayload = (await response.json()) as {
-    ok: boolean;
-    result?: { message_id: number };
-    description?: string;
-  };
+  if (input.imageUrl) {
+    const formData = new FormData();
+    formData.set("chat_id", chatId);
+    formData.set("photo", await buildTelegramPhotoUpload(input.imageUrl));
+    formData.set("caption", input.text);
+    formData.set("parse_mode", "HTML");
+    formData.set("reply_markup", JSON.stringify(replyMarkup));
 
-  if (!responsePayload.ok || !responsePayload.result) {
-    throw new Error(responsePayload.description ?? "Telegram API error.");
+    return callTelegram("sendPhoto", formData);
   }
 
-  return responsePayload.result.message_id;
+  return callTelegram("sendMessage", {
+    chat_id: chatId,
+    text: input.text,
+    parse_mode: "HTML",
+    reply_markup: replyMarkup,
+    disable_web_page_preview: false,
+  }, "application/json");
 }

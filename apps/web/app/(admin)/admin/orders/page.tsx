@@ -1,5 +1,6 @@
 import { prisma } from "@prostor/db";
 import { isMarketingMode } from "../../../../lib/auth/marketing";
+import { formatOrderNumber } from "../../../../lib/order-number";
 import { AdminPagination, AdminSearch, PAGE_SIZE } from "../../../../components/admin/admin-pagination";
 import { updateOrderStatusAction } from "./actions";
 
@@ -47,6 +48,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
           { customerName: { contains: searchQuery, mode: "insensitive" as const } },
           { phone: { contains: searchQuery, mode: "insensitive" as const } },
           { id: { contains: searchQuery, mode: "insensitive" as const } },
+          { orderNumber: { contains: searchQuery, mode: "insensitive" as const } },
         ],
       }
     : {};
@@ -102,6 +104,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
                 <div>
                   <strong>{order.customerName}</strong>
                   <div className="muted">{order.phone}</div>
+                  <div className="muted">Заказ {formatOrderNumber({ id: order.id, orderNumber: order.orderNumber, createdAt: order.createdAt })}</div>
                   <div className="muted">{order.createdAt.toLocaleString("ru-RU")}</div>
                 </div>
                 <div>

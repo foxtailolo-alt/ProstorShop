@@ -6,6 +6,7 @@ import { logAdminActivity } from "../../../../lib/audit";
 import { requirePermission } from "../../../../lib/auth/session";
 import { applyBackgroundRemoval, clampBackgroundRemovalTolerance } from "../../../../lib/background-removal";
 import { saveProductImages, saveProductImage } from "../../../../lib/media";
+import { processUsedDeviceWaitlistMatchesForProduct } from "../../../../lib/used-device-waitlist-notifications";
 
 const maxProductImageCount = 10;
 
@@ -165,6 +166,10 @@ export async function upsertProductAction(
           },
         });
 
+    if (savedProduct.inStock) {
+      await processUsedDeviceWaitlistMatchesForProduct(savedProduct.id).catch(() => null);
+    }
+
     const recommendedIdsRaw = String(formData.get("recommendedIds") ?? "").trim();
     const recommendedIds = recommendedIdsRaw
       ? recommendedIdsRaw.split(",").filter(Boolean)
@@ -204,8 +209,10 @@ export async function upsertProductAction(
 
     revalidatePath("/admin/products");
     revalidatePath("/admin");
+    revalidatePath("/admin/waitlist");
     revalidatePath("/admin/activity");
     revalidatePath("/catalog");
+    revalidatePath("/profile");
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Не удалось сохранить товар.",
@@ -250,8 +257,10 @@ export async function deleteProductAction(formData: FormData) {
 
   revalidatePath("/admin/products");
   revalidatePath("/admin");
+  revalidatePath("/admin/waitlist");
   revalidatePath("/admin/activity");
   revalidatePath("/catalog");
+  revalidatePath("/profile");
 }
 
 export async function toggleProductStockAction(formData: FormData) {
@@ -268,6 +277,10 @@ export async function toggleProductStockAction(formData: FormData) {
     data: { inStock: !current },
   });
 
+  if (product.inStock) {
+    await processUsedDeviceWaitlistMatchesForProduct(product.id).catch(() => null);
+  }
+
   await logAdminActivity({
     entityType: "product",
     entityId: product.id,
@@ -278,8 +291,10 @@ export async function toggleProductStockAction(formData: FormData) {
 
   revalidatePath("/admin/products");
   revalidatePath("/admin");
+  revalidatePath("/admin/waitlist");
   revalidatePath("/admin/activity");
   revalidatePath("/catalog");
+  revalidatePath("/profile");
 }
 
 export async function updateProductAttributeAction(formData: FormData) {
@@ -340,6 +355,10 @@ export async function updateProductAttributeAction(formData: FormData) {
     });
   }
 
+  if (product.inStock) {
+    await processUsedDeviceWaitlistMatchesForProduct(product.id).catch(() => null);
+  }
+
   await logAdminActivity({
     entityType: "product-attribute",
     entityId: product.id,
@@ -354,8 +373,10 @@ export async function updateProductAttributeAction(formData: FormData) {
 
   revalidatePath("/admin/products");
   revalidatePath("/admin");
+  revalidatePath("/admin/waitlist");
   revalidatePath("/admin/activity");
   revalidatePath("/catalog");
+  revalidatePath("/profile");
   revalidatePath(`/catalog/${product.category.slug}/${product.slug}`);
 }
 

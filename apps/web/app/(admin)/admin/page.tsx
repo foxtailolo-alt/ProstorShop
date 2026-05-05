@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@prostor/db";
+import { formatOrderNumber } from "../../../lib/order-number";
 import {
   getCatalogSummaryData,
   getFeatureFlagEntries,
@@ -113,6 +114,7 @@ export default async function AdminPage() {
                 <div>
                   <strong>{order.customerName}</strong>
                   <div className="muted">{order.phone}</div>
+                  <div className="muted">Заказ {formatOrderNumber({ id: order.id, orderNumber: order.orderNumber, createdAt: order.createdAt })}</div>
                 </div>
                 <div className="admin-list-meta">
                   <div>{Number(order.total).toLocaleString("ru-RU")} ₽</div>

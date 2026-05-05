@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { prisma } from "@prostor/db";
 import { StoreNav } from "../../components/layout/store-nav";
 import { ProductCardMedia } from "../../components/product/product-card-media";
 import { BannerCarousel } from "../../components/store/banner-carousel";
 import { BestsellersSection } from "../../components/store/bestsellers-section";
 import { CategoryGrid } from "../../components/store/category-grid";
 import { CoverflowCarousel } from "../../components/store/coverflow-carousel";
+import { getSession } from "../../lib/auth/session";
 import {
   getRuntimeFeatureFlags,
   listActiveBanners,
@@ -13,10 +15,11 @@ import {
   loadCategoryTree,
   loadHomepageSections,
 } from "../../lib/data/catalog";
+import { findUsedInventoryCandidates } from "../../lib/upgrade-suggestions";
 import { addToCartAction } from "./cart/actions";
 
 export default async function StorefrontPage() {
-  const [catalogCategories, products, featureFlags, banners, categoryTree, homepageSections] =
+  const [catalogCategories, products, featureFlags, banners, categoryTree, homepageSections, session] =
     await Promise.all([
       listCatalogCategories(),
       listCatalogProducts(),
@@ -24,46 +27,78 @@ export default async function StorefrontPage() {
       listActiveBanners(),
       loadCategoryTree(),
       loadHomepageSections(),
+      getSession(),
     ]);
 
   const inStockProducts = products.filter((p) => p.inStock);
+  const userDevices = session
+    ? await prisma.userDevice.findMany({
+        where: { userId: session.user.id },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+        select: {
+          nickname: true,
+          brand: true,
+          model: true,
+          categoryCode: true,
+          storage: true,
+          estimatedTradeInValue: true,
+        },
+      })
+    : [];
+
+  const usedStockBanner = userDevices
+    .map((device) => {
+      const candidates = findUsedInventoryCandidates(
+        {
+          categoryCode: device.categoryCode,
+          brand: device.brand,
+          model: device.model,
+          storage: device.storage,
+          estimatedTradeInValue: Number(device.estimatedTradeInValue),
+        },
+        products,
+        categoryTree,
+      );
+
+      if (candidates.length === 0) {
+        return null;
+      }
+
+      return {
+        deviceTitle: device.nickname?.trim() || `${device.brand} ${device.model}`,
+        candidates,
+      };
+    })
+    .find(Boolean) ?? null;
 
   return (
     <main className="page shell">
       <StoreNav />
 
-      {/* Hero */}
-      <section className="hero glass">
-        <div className="grid grid-2 product-hero-grid">
-          <div className="animate-fade-up">
-            <h1>Магазин техники<br />Простор</h1>
-            <p className="hero-subtitle">
-              iPhone, Samsung, MacBook, iPad и аксессуары.<br />
-              Честные цены, гарантия, trade-in и сервис.
-            </p>
-            <div className="actions" style={{ marginTop: 24 }}>
-              <Link className="button button-primary" href="/catalog">
-                Перейти в каталог
+      {usedStockBanner ? (
+        <section className="store-section animate-fade-up">
+          <div className="used-stock-banner glass">
+            <div className="used-stock-banner-copy">
+              <div className="section-label">Ваше персональное предложение</div>
+              <h2 className="store-section-title" style={{ marginBottom: 8 }}>
+                Под {usedStockBanner.deviceTitle} уже есть подходящие trade-in позиции
+              </h2>
+              <p className="store-page-subtitle" style={{ marginBottom: 0 }}>
+                В каталоге сейчас доступно {usedStockBanner.candidates.length} релевантных варианта. Можно сразу открыть профиль или перейти в карточку товара.
+              </p>
+            </div>
+            <div className="used-stock-banner-actions">
+              <Link className="button button-primary" href="/profile">Открыть профиль</Link>
+              <Link
+                className="button button-secondary"
+                href={`/catalog/${usedStockBanner.candidates[0]?.categorySlug}/${usedStockBanner.candidates[0]?.slug}`}
+              >
+                Смотреть вариант
               </Link>
-              {featureFlags.tradeInEnabled ? (
-                <Link className="button button-secondary" href="/trade-in">
-                  Оценить Trade-in
-                </Link>
-              ) : null}
             </div>
           </div>
-          <div className="hero-stats animate-fade-up delay-2">
-            <div className="hero-stat-item">
-              <span className="hero-stat-number">{inStockProducts.length}</span>
-              <span className="hero-stat-label">товаров в наличии</span>
-            </div>
-            <div className="hero-stat-item">
-              <span className="hero-stat-number">{catalogCategories.length}</span>
-              <span className="hero-stat-label">категорий</span>
-            </div>
-          </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       {/* Banner Carousel */}
       {banners.length > 0 && (

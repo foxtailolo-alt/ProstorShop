@@ -4,6 +4,7 @@ import { StoreNav } from "../../../components/layout/store-nav";
 import { getCartItems } from "../../../lib/cart";
 import { getSession } from "../../../lib/auth/session";
 import { getRuntimeFeatureFlags, listCatalogProducts } from "../../../lib/data/catalog";
+import { formatOrderNumber } from "../../../lib/order-number";
 import { getAppliedPromoCode, getPromoCodeSummary } from "../../../lib/promo";
 import { applyPromoCodeAction, clearCartAction, clearPromoCodeAction, removeCartItemAction, submitOrderAction, updateCartItemAction } from "./actions";
 
@@ -12,6 +13,7 @@ type CartPageProps = {
     added?: string;
     success?: string;
     orderId?: string;
+    orderNumber?: string;
     promo?: string;
     promoError?: string;
   }>;
@@ -22,6 +24,7 @@ export default async function CartPage({ searchParams }: CartPageProps) {
   const addedProductSlug = resolvedSearchParams?.added?.trim();
   const success = resolvedSearchParams?.success === "1";
   const orderId = resolvedSearchParams?.orderId?.trim();
+  const orderNumber = resolvedSearchParams?.orderNumber?.trim();
   const promoMessage = resolvedSearchParams?.promo?.trim();
   const promoError = resolvedSearchParams?.promoError?.trim();
 
@@ -66,7 +69,9 @@ export default async function CartPage({ searchParams }: CartPageProps) {
         <section className="store-section">
           <div className="success-banner glass">
             <h1>Заказ оформлен!</h1>
-            <p>Номер заказа: {orderId ?? "—"}. Мы свяжемся с вами для подтверждения.</p>
+            <p>
+              Номер заказа: {orderNumber ?? (orderId ? formatOrderNumber({ id: orderId, createdAt: new Date() }) : "—")}. Мы свяжемся с вами для подтверждения.
+            </p>
             <Link className="button button-primary" href="/catalog">Продолжить покупки</Link>
           </div>
         </section>

@@ -584,6 +584,129 @@ img {
 .trade-in-quote-trace-row span,
 .trade-in-admin-answer-item span { color: var(--text-secondary); font-size: 14px; }
 .trade-in-admin-answer-list { display: grid; gap: 8px; margin-top: 12px; padding: 12px; border-radius: var(--radius-md); background: rgba(255,255,255,0.48); border: 1px solid var(--line); }
+.trade-in-save-toggle { display: inline-flex; align-items: center; gap: 12px; font-size: 15px; color: var(--text-primary); }
+.trade-in-save-toggle input { width: 18px; height: 18px; }
+.profile-shell { display: grid; gap: 18px; }
+.profile-tabs-strip { padding: 20px; margin-bottom: 18px; }
+.profile-tabs-panel { display: grid; gap: 18px; padding: 20px; }
+.profile-tab-list { display: flex; flex-wrap: wrap; gap: 10px; }
+.profile-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.56);
+  color: var(--text-secondary);
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.profile-tab:hover { border-color: rgba(79,110,247,0.24); color: var(--accent); background: rgba(255,255,255,0.82); }
+.profile-tab.is-active { background: var(--accent); border-color: var(--accent); color: white; box-shadow: 0 8px 22px rgba(79,110,247,0.18); }
+.profile-tab-content { display: grid; gap: 18px; }
+.profile-section-stack { display: grid; gap: 18px; }
+.profile-device-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.profile-device-card { display: grid; gap: 14px; padding: 20px; }
+.profile-device-card-top { display: flex; gap: 16px; align-items: flex-start; }
+.profile-device-media {
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+  background: linear-gradient(145deg, #f8fafc, #eef2f7);
+  border: 1px solid var(--line);
+}
+.profile-device-media img { width: 100%; height: 100%; object-fit: contain; }
+.profile-device-empty { display: grid; gap: 10px; padding: 18px; }
+.profile-device-meta { display: flex; flex-wrap: wrap; gap: 10px; }
+.profile-device-price { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; }
+.profile-waitlist-grid { display: grid; gap: 14px; }
+.profile-waitlist-card { display: grid; gap: 14px; padding: 18px; }
+.profile-waitlist-meta { display: flex; flex-wrap: wrap; gap: 10px; }
+.profile-notification-list { display: grid; gap: 12px; }
+.profile-notification-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 18px; }
+.profile-pending-device-list { display: grid; gap: 12px; }
+.profile-pending-device-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.5);
+}
+.profile-pending-device-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.profile-pending-device-media {
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+  background: linear-gradient(145deg, #f8fafc, #eef2f7);
+}
+.profile-pending-device-media img { width: 100%; height: 100%; object-fit: contain; }
+.profile-pending-device-copy { display: grid; gap: 4px; min-width: 0; }
+.profile-upgrade-list { display: grid; gap: 10px; padding-top: 6px; border-top: 1px solid var(--line); }
+.profile-upgrade-grid { display: grid; gap: 10px; }
+.profile-upgrade-card { display: grid; gap: 8px; padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--line); background: rgba(255,255,255,0.52); text-decoration: none; color: inherit; }
+.profile-upgrade-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.profile-upgrade-card-media {
+  width: 100%;
+  max-width: 132px;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: linear-gradient(145deg, #f8fafc, #eef2f7);
+  border: 1px solid var(--line);
+}
+.profile-upgrade-card-media img { width: 100%; height: 100%; object-fit: contain; }
+.profile-upgrade-card:hover { border-color: rgba(79,110,247,0.28); background: rgba(255,255,255,0.7); }
+.profile-success-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; margin-bottom: 18px; }
+.profile-alert-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; }
+.profile-order-card { display: grid; gap: 18px; padding: 20px; }
+.profile-order-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.profile-order-meta-top { display: grid; gap: 8px; justify-items: end; text-align: right; }
+.profile-order-products { display: flex; flex-wrap: wrap; gap: 14px; }
+.profile-order-product-card {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 420px);
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.46);
+}
+.profile-order-product-card-link {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  color: inherit;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+.profile-order-product-card:hover { border-color: rgba(79,110,247,0.25); background: rgba(255,255,255,0.72); }
+.profile-order-product-media { overflow: hidden; border-radius: var(--radius-md); aspect-ratio: 1; max-width: 112px; background: linear-gradient(145deg, #f8fafc, #eef2f7); }
+.profile-order-product-media img { width: 100%; height: 100%; object-fit: contain; }
+.profile-order-product-body { display: grid; gap: 6px; }
+.profile-order-product-price-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.profile-order-item-action { margin-top: 4px; }
+.profile-order-breakdown { display: grid; gap: 14px; padding: 16px; }
+.profile-order-line-list { display: grid; gap: 10px; }
+.profile-order-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.profile-order-summary { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.profile-order-summary-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.waitlist-cta-banner { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px 24px; border-radius: var(--radius-xl); }
+.waitlist-cta-copy { display: grid; gap: 6px; max-width: 720px; }
+.admin-waitlist-match-list { display: grid; gap: 8px; }
+.admin-waitlist-match-item { display: grid; gap: 4px; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--line); background: rgba(255,255,255,0.45); }
+.used-stock-banner { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 22px; border-radius: var(--radius-lg); }
+.used-stock-banner-copy { display: grid; gap: 6px; }
+.used-stock-banner-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 
 /* -- Product media -- */
 .product-media { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: linear-gradient(145deg, #f8fafc, #eef2f7); }
@@ -632,6 +755,8 @@ img {
   .auth-row { flex-direction: column; }
   .auth-divider { flex-direction: row; padding: 8px 0; }
   .auth-divider-line { width: auto; min-height: 0; height: 1px; min-width: 24px; flex: 1; }
+  .profile-device-card-top { flex-direction: column; }
+  .profile-pending-device-card { align-items: stretch; flex-direction: column; }
 }
 .dev-login-card { max-width: 620px; }
 .dev-login-card form { margin: 0; }
@@ -1821,6 +1946,13 @@ img {
   .grid-4, .grid-5 { grid-template-columns: repeat(2, minmax(0,1fr)); }
   .trade-in-wizard-head { flex-direction: column; }
   .trade-in-wizard-progress { width: 100%; min-width: 0; }
+  .profile-device-grid { grid-template-columns: 1fr; }
+  .profile-order-head, .profile-order-line, .profile-order-summary-row { flex-direction: column; align-items: flex-start; }
+  .profile-order-meta-top { justify-items: start; text-align: left; }
+  .profile-order-product-card { grid-template-columns: 1fr; width: 100%; }
+  .profile-order-product-media { max-width: 100%; }
+  .profile-notification-card { flex-direction: column; align-items: stretch; }
+  .waitlist-cta-banner { flex-direction: column; align-items: stretch; }
   .admin-shell, .admin-table-row { grid-template-columns: 1fr; }
   .competitor-sync-card-grid { grid-template-columns: 1fr; }
   .competitor-sync-card-head { flex-direction: column; }

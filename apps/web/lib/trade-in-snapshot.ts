@@ -502,6 +502,7 @@ export function buildTradeInFlowState(
   categoryCode: string,
   modelCode: string,
   answers: Record<string, string>,
+  questionFilter?: (question: TradeInSnapshotQuestion) => boolean,
 ): TradeInFlowState {
   const category = snapshot.categories.find((item) => item.categoryCode === categoryCode);
   if (!category) {
@@ -511,7 +512,10 @@ export function buildTradeInFlowState(
   const resolvedAnswers = { ...answers };
   const questions: TradeInVisibleQuestion[] = [];
 
-  for (const question of [...category.questions].filter((item) => item.isEnabled !== false).sort((left, right) => left.stepIndex - right.stepIndex)) {
+  for (const question of [...category.questions]
+    .filter((item) => item.isEnabled !== false)
+    .filter((item) => (questionFilter ? questionFilter(item) : true))
+    .sort((left, right) => left.stepIndex - right.stepIndex)) {
     const options = buildQuestionOptions(question, modelCode);
     if (options.length === 0) {
       continue;

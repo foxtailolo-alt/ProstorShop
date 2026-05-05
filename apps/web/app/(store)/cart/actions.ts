@@ -7,6 +7,7 @@ import { getSession } from "../../../lib/auth/session";
 import { getAttributionSnapshot } from "../../../lib/attribution";
 import { parseProductOptions, resolveVariantSelection } from "../../../lib/cart-selection";
 import { addCartItem, buildCartItemKey, clearCart, getCartItems, removeCartItem, updateCartItem } from "../../../lib/cart";
+import { generateUniqueOrderNumber, isOrderNumberConflict } from "../../../lib/order-number";
 import { clearAppliedPromoCode, getAppliedPromoCode, getPromoCodeSummary, setAppliedPromoCode } from "../../../lib/promo";
 import { resolveProductPrice } from "../../../lib/pricing";
 
@@ -206,53 +207,85 @@ export async function submitOrderAction(formData: FormData) {
 
   const total = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
 
-  const order = await prisma.$transaction(async (transaction) => {
-    if (session?.user.id) {
-      await transaction.user.update({
-        where: { id: session.user.id },
-        data: { phone },
-      });
-    }
+  let order: { id: string; orderNumber: string | null } | null = null;
 
-    const createdOrder = await transaction.order.create({
-      data: {
-        userId: session?.user.id ?? null,
-        customerName,
-        phone,
-        note: note || null,
-        total,
-        attribution: attribution ?? undefined,
-        appliedPromoCodeId: appliedPromoCode?.id ?? null,
-        promoRewardDescription: appliedPromoCode?.rewardDescription ?? null,
-        items: {
-          create: orderItems.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            price: item.price,
-            variantLabel: item.variantLabel,
-          })),
-        },
-      },
-    });
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      order = await prisma.$transaction(async (transaction) => {
+        if (session?.user.id) {
+          await transaction.user.update({
+            where: { id: session.user.id },
+            data: { phone },
+          });
+        }
 
-    if (appliedPromoCode) {
-      await transaction.promoCode.update({
-        where: { id: appliedPromoCode.id },
-        data: {
-          usageCount: {
-            increment: 1,
+        const orderNumber = await generateUniqueOrderNumber(async (candidate) => {
+          const existingOrder = await transaction.order.findUnique({
+            where: { orderNumber: candidate },
+            select: { id: true },
+          });
+
+          return Boolean(existingOrder);
+        });
+
+        const createdOrder = await transaction.order.create({
+          data: {
+            orderNumber,
+            userId: session?.user.id ?? null,
+            customerName,
+            phone,
+            note: note || null,
+            total,
+            attribution: attribution ?? undefined,
+            appliedPromoCodeId: appliedPromoCode?.id ?? null,
+            promoRewardDescription: appliedPromoCode?.rewardDescription ?? null,
+            items: {
+              create: orderItems.map((item) => ({
+                productId: item.productId,
+                quantity: item.quantity,
+                price: item.price,
+                variantLabel: item.variantLabel,
+              })),
+            },
           },
-        },
-      });
-    }
+          select: {
+            id: true,
+            orderNumber: true,
+          },
+        });
 
-    return createdOrder;
-  });
+        if (appliedPromoCode) {
+          await transaction.promoCode.update({
+            where: { id: appliedPromoCode.id },
+            data: {
+              usageCount: {
+                increment: 1,
+              },
+            },
+          });
+        }
+
+        return createdOrder;
+      });
+
+      break;
+    } catch (error) {
+      if (attempt < 4 && isOrderNumberConflict(error)) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  if (!order) {
+    throw new Error("Не удалось оформить заказ.");
+  }
 
   await clearCart();
   await clearAppliedPromoCode();
   revalidatePath("/admin");
   revalidatePath("/admin/orders");
   revalidatePath("/profile");
-  redirect(`/cart?success=1&orderId=${order.id}`);
+  redirect(`/cart?success=1&orderId=${order.id}&orderNumber=${encodeURIComponent(order.orderNumber ?? order.id)}`);
 }

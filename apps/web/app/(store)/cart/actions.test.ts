@@ -82,14 +82,15 @@ describe("cart actions", () => {
     mockClearAppliedPromoCode.mockResolvedValue(undefined);
     mockUserUpdate.mockResolvedValue(undefined);
     mockPromoCodeUpdate.mockResolvedValue(undefined);
-    mockOrderCreate.mockResolvedValue({ id: "order-1" });
+    mockProductFindUnique.mockResolvedValue(null);
+    mockOrderCreate.mockResolvedValue({ id: "order-1", orderNumber: "A56348" });
     mockTransaction.mockImplementation(async (callback: (transaction: {
       user: { update: typeof mockUserUpdate };
-      order: { create: typeof mockOrderCreate };
+      order: { create: typeof mockOrderCreate; findUnique: typeof mockProductFindUnique };
       promoCode: { update: typeof mockPromoCodeUpdate };
     }) => Promise<unknown>) => callback({
       user: { update: mockUserUpdate },
-      order: { create: mockOrderCreate },
+      order: { create: mockOrderCreate, findUnique: mockProductFindUnique },
       promoCode: { update: mockPromoCodeUpdate },
     }));
   });
@@ -170,11 +171,12 @@ describe("cart actions", () => {
     formData.set("note", "Позвонить после 18:00");
 
     await expect(submitOrderAction(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/cart?success=1&orderId=order-1",
+      "NEXT_REDIRECT:/cart?success=1&orderId=order-1&orderNumber=A56348",
     );
 
     expect(mockOrderCreate).toHaveBeenCalledWith({
       data: {
+        orderNumber: expect.any(String),
         userId: "user-1",
         customerName: "Тестовый клиент",
         phone: "+79990000000",
@@ -193,6 +195,10 @@ describe("cart actions", () => {
             },
           ],
         },
+      },
+      select: {
+        id: true,
+        orderNumber: true,
       },
     });
     expect(mockUserUpdate).toHaveBeenCalledWith({

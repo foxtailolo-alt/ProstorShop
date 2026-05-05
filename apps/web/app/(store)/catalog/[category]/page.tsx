@@ -24,6 +24,13 @@ type CategoryPageProps = {
 
 export const dynamic = "force-dynamic";
 
+const WAITLIST_CATEGORY_SLUGS = new Set([
+  "trade-in-ustroystva-trade-in-smartfony",
+  "trade-in-ustroystva-trade-in-planshety",
+  "trade-in-ustroystva-trade-in-chasy",
+  "trade-in-ustroystva-trade-in-noutbuki",
+]);
+
 function countTreeProducts(node: CategoryTreeNode): number {
   return node.productCount + node.children.reduce((sum, child) => sum + countTreeProducts(child), 0);
 }
@@ -72,6 +79,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
   const ancestors = getCategoryPath(tree, category).slice(0, -1);
   const isLeaf = node.children.length === 0;
+  const showWaitlistCta = isLeaf && WAITLIST_CATEGORY_SLUGS.has(node.slug);
 
   return (
     <main className="page shell">
@@ -96,6 +104,23 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
       {banners.length > 0 ? (
         <section className="store-section animate-fade-up">
           <BannerCarousel banners={banners} />
+        </section>
+      ) : null}
+
+      {showWaitlistCta ? (
+        <section className="store-section animate-fade-up">
+          <div className="waitlist-cta-banner glass">
+            <div className="waitlist-cta-copy">
+              <div className="section-label">Список ожидания</div>
+              <strong>Нет нужного устройства? Добавьте устройство в список ожидания.</strong>
+              <p className="muted" style={{ margin: 0 }}>
+                Укажите интересующую модель и параметры, а мы оповестим Вас о поступлении этого устройства!
+              </p>
+            </div>
+            <div className="actions">
+              <Link className="button button-primary" href="/waitlist/add">Добавить устройство</Link>
+            </div>
+          </div>
         </section>
       ) : null}
 

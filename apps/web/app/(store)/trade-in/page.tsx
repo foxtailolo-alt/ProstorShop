@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StoreNav } from "../../../components/layout/store-nav";
+import { getSession } from "../../../lib/auth/session";
 import { getRuntimeFeatureFlags } from "../../../lib/data/catalog";
 import { getActiveTradeInSnapshot, listTradeInRules } from "../../../lib/data/pricing";
 import { TradeInCalculator } from "./trade-in-calculator";
@@ -14,7 +15,12 @@ type TradeInPageProps = {
 };
 
 export default async function TradeInPage({ searchParams }: TradeInPageProps) {
-  const [rules, activeSnapshot, featureFlags] = await Promise.all([listTradeInRules(), getActiveTradeInSnapshot(), getRuntimeFeatureFlags()]);
+  const [rules, activeSnapshot, featureFlags, session] = await Promise.all([
+    listTradeInRules(),
+    getActiveTradeInSnapshot(),
+    getRuntimeFeatureFlags(),
+    getSession(),
+  ]);
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const success = resolvedSearchParams?.success === "1";
   const requestId = resolvedSearchParams?.requestId?.trim();
@@ -44,7 +50,7 @@ export default async function TradeInPage({ searchParams }: TradeInPageProps) {
         </section>
       ) : (
         <section className="store-section">
-          {activeSnapshot ? <TradeInWizard snapshot={activeSnapshot} /> : <TradeInCalculator rules={rules} />}
+          {activeSnapshot ? <TradeInWizard snapshot={activeSnapshot} canSaveToProfile={Boolean(session)} /> : <TradeInCalculator rules={rules} />}
         </section>
       )}
 

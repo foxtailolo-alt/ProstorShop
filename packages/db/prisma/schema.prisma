@@ -23,6 +23,10 @@ model User {
   activityLogs     ActivityLog[]
   carts            Cart[]
   orders           Order[]
+  userDevices      UserDevice[]
+  usedDeviceWaitlistEntries UsedDeviceWaitlistEntry[]
+  profileNotifications ProfileNotification[]
+  usedStockAlertSubscriptions UsedStockAlertSubscription[]
   tradeInRequests  TradeInRequest[]
   serviceRequests  ServiceRequest[]
   competitorPriceSyncRuns CompetitorPriceSyncRun[]
@@ -93,6 +97,9 @@ model Product {
   cartItems   CartItem[]
   orderItems  OrderItem[]
   telegramPosts TelegramPost[]
+  usedDeviceWaitlistMatches UsedDeviceWaitlistMatch[]
+  profileNotifications ProfileNotification[]
+  usedStockAlertDeliveries UsedStockAlertDelivery[]
   recommendedBy  ProductRecommendation[] @relation("RecommendedProduct")
   recommendations ProductRecommendation[] @relation("SourceProduct")
   homepageItems   HomepageItem[]
@@ -170,6 +177,7 @@ model CartItem {
 
 model Order {
   id          String      @id @default(cuid())
+  orderNumber String?     @unique
   userId      String?
   user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   appliedPromoCodeId String?
@@ -183,6 +191,8 @@ model Order {
   cashbackPointsAwarded Int @default(0)
   attribution Json?
   items       OrderItem[]
+  userDevices UserDevice[]
+  fulfilledUsedDeviceWaitlistEntries UsedDeviceWaitlistEntry[] @relation("WaitlistFulfilledOrder")
   pointTransactions PointTransaction[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -306,7 +316,133 @@ model TradeInRequest {
   note              String?
   attribution       Json?
   status            String   @default("new")
+  userDevice        UserDevice?
   createdAt         DateTime @default(now())
+}
+
+model UserDevice {
+  id                       String          @id @default(cuid())
+  userId                   String
+  user                     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceKind               String          @default("trade-in")
+  nickname                 String?
+  imageUrl                 String?
+  categoryCode             String
+  brand                    String
+  model                    String
+  deviceModelCode          String?
+  storage                  String?
+  condition                String
+  estimatedTradeInValue    Decimal         @db.Decimal(10, 2)
+  lastTradeInSnapshotVersion Int?
+  answersJson              Json?
+  tradeInRequestId         String?         @unique
+  tradeInRequest           TradeInRequest? @relation(fields: [tradeInRequestId], references: [id], onDelete: SetNull)
+  orderId                  String?
+  order                    Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  usedStockAlertSubscription UsedStockAlertSubscription?
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+
+  @@index([userId, categoryCode])
+  @@index([userId, updatedAt])
+}
+
+model UsedDeviceWaitlistEntry {
+  id                 String                    @id @default(cuid())
+  userId             String
+  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryCode       String
+  brand              String
+  model              String
+  deviceModelCode    String?
+  normalizedModel    String?
+  modelRank          Int?
+  storage            String?
+  color              String?
+  displaySize        String?
+  connectivity       String?
+  answersJson        Json?
+  status             String                    @default("active")
+  fulfilledByOrderId String?
+  fulfilledByOrder   Order?                    @relation("WaitlistFulfilledOrder", fields: [fulfilledByOrderId], references: [id], onDelete: SetNull)
+  matches            UsedDeviceWaitlistMatch[]
+  profileNotifications ProfileNotification[]
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  @@index([userId, status, createdAt])
+  @@index([categoryCode, status])
+  @@index([deviceModelCode, status])
+  @@index([fulfilledByOrderId])
+}
+
+model UsedDeviceWaitlistMatch {
+  id               String                  @id @default(cuid())
+  waitlistEntryId  String
+  waitlistEntry    UsedDeviceWaitlistEntry @relation(fields: [waitlistEntryId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product                 @relation(fields: [productId], references: [id], onDelete: Cascade)
+  confidence       Int                     @default(0)
+  matchSource      String                  @default("attribute")
+  breakdownJson    Json?
+  telegramMessageId Int?
+  notifiedAt       DateTime?
+  createdAt        DateTime                @default(now())
+
+  @@unique([waitlistEntryId, productId])
+  @@index([productId, createdAt])
+  @@index([waitlistEntryId, createdAt])
+}
+
+model ProfileNotification {
+  id               String                  @id @default(cuid())
+  userId           String
+  user             User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  waitlistEntryId  String?
+  waitlistEntry    UsedDeviceWaitlistEntry? @relation(fields: [waitlistEntryId], references: [id], onDelete: SetNull)
+  productId        String?
+  product          Product?                @relation(fields: [productId], references: [id], onDelete: SetNull)
+  kind             String                  @default("waitlist_match")
+  title            String
+  body             String?
+  actionUrl        String?
+  isViewed         Boolean                 @default(false)
+  viewedAt         DateTime?
+  createdAt        DateTime                @default(now())
+
+  @@index([userId, isViewed, createdAt])
+  @@index([waitlistEntryId, createdAt])
+  @@index([productId, createdAt])
+}
+
+model UsedStockAlertSubscription {
+  id          String                  @id @default(cuid())
+  userId      String
+  user        User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userDeviceId String                 @unique
+  userDevice  UserDevice              @relation(fields: [userDeviceId], references: [id], onDelete: Cascade)
+  categoryCode String
+  isActive    Boolean                 @default(true)
+  deliveries  UsedStockAlertDelivery[]
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@index([categoryCode, isActive])
+  @@index([userId, isActive])
+}
+
+model UsedStockAlertDelivery {
+  id             String                     @id @default(cuid())
+  subscriptionId String
+  subscription   UsedStockAlertSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product                    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  telegramMessageId Int?
+  sentAt         DateTime                   @default(now())
+
+  @@unique([subscriptionId, productId])
+  @@index([productId, sentAt])
 }
 
 model ServicePriceTable {

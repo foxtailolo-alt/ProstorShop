@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@prostor/db";
 import { logAdminActivity } from "../../../../lib/audit";
 import { requirePermission } from "../../../../lib/auth/session";
+import { fulfillUsedDeviceWaitlistEntriesForOrder } from "../../../../lib/used-device-waitlist-notifications";
 
 const allowedStatuses = new Set(["pending", "contacted", "confirmed", "completed", "cancelled"]);
 
@@ -95,6 +96,10 @@ export async function updateOrderStatusAction(formData: FormData) {
     }
   });
 
+  if (status === "completed") {
+    await fulfillUsedDeviceWaitlistEntriesForOrder(orderId).catch(() => null);
+  }
+
   await logAdminActivity({
     entityType: "order",
     entityId: orderId,
@@ -105,6 +110,7 @@ export async function updateOrderStatusAction(formData: FormData) {
 
   revalidatePath("/admin");
   revalidatePath("/admin/orders");
+  revalidatePath("/admin/waitlist");
   revalidatePath("/admin/activity");
   revalidatePath("/profile");
 }

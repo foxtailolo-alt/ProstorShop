@@ -15,6 +15,7 @@ const adminNavigation = [
   { href: "/admin/banners", label: "Баннеры", marketing: false },
   { href: "/admin/trade-in", label: "Trade-in", marketing: false },
   { href: "/admin/waitlist", label: "Waitlist", marketing: false },
+  { href: "/admin/promo-codes", label: "Промокоды", marketing: false },
   { href: "/admin/service-pricing", label: "Прайс сервиса", marketing: false },
   { href: "/admin/telegram-posts", label: "Telegram посты", marketing: false },
   { href: "/admin/marketing", label: "📊 Маркетинг", marketing: true },

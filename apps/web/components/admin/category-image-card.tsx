@@ -5,12 +5,14 @@ import { SquareImageEditorModal } from "./square-image-editor-modal";
 
 type CategoryImageCardProps = {
   categoryId: string;
+  categorySlug?: string;
+  categoryName?: string;
   label: string;
   imageUrl: string | null;
   action: (formData: FormData) => void | Promise<void>;
 };
 
-export function CategoryImageCard({ categoryId, label, imageUrl, action }: CategoryImageCardProps) {
+export function CategoryImageCard({ categoryId, categorySlug, categoryName, label, imageUrl, action }: CategoryImageCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(imageUrl);
   const [editorSrc, setEditorSrc] = useState<string | null>(null);
@@ -75,8 +77,10 @@ export function CategoryImageCard({ categoryId, label, imageUrl, action }: Categ
           Нет изображения
         </div>
       )}
-      <form action={action} encType="multipart/form-data" style={{ display: "grid", gap: 8 }}>
+      <form action={action} style={{ display: "grid", gap: 8 }}>
         <input type="hidden" name="categoryId" value={categoryId} />
+        <input type="hidden" name="categorySlug" value={categorySlug ?? ""} />
+        <input type="hidden" name="categoryName" value={categoryName ?? ""} />
         <input
           ref={inputRef}
           type="file"

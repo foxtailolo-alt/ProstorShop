@@ -5,6 +5,7 @@ import { getSession, isAdminSession } from "../../lib/auth/session";
 import { getCartItems } from "../../lib/cart";
 import { getRuntimeFeatureFlags } from "../../lib/data/catalog";
 import { getNavigation } from "../../lib/site";
+import { BrandLogo } from "./brand-logo";
 
 export async function StoreNav() {
   const [featureFlags, cartItems, session] = await Promise.all([
@@ -23,7 +24,9 @@ export async function StoreNav() {
 
   return (
     <nav className="nav glass">
-      <Link href="/" className="nav-logo">{siteConfig.legalName}</Link>
+      <Link href="/" className="nav-logo" aria-label={siteConfig.legalName}>
+        <BrandLogo compact />
+      </Link>
       <div className="nav-side">
         <div className="nav-links">
           {navigation.map((item) => (

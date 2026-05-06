@@ -1,10 +1,11 @@
 import Link from "next/link";
+import { ConfirmButton } from "../../../components/admin/confirm-button";
 import { StoreNav } from "../../../components/layout/store-nav";
 import { TelegramLoginWidget } from "../../../components/auth/telegram-login-widget";
 import { PhoneLoginCard } from "../../../components/auth/phone-login-card";
 import { formatOrderNumber } from "../../../lib/order-number";
 import { getCurrentUserProfile } from "../../../lib/profile";
-import { addPurchasedProfileDeviceAction } from "./actions";
+import { addPurchasedProfileDeviceAction, removeProfileDeviceAction } from "./actions";
 import { deleteUsedDeviceWaitlistEntryAction, openProfileNotificationAction } from "../waitlist/actions";
 
 const statusLabels: Record<string, string> = {
@@ -57,6 +58,7 @@ type PendingPurchasedDevice = NonNullable<Awaited<ReturnType<typeof getCurrentUs
 type ProfilePageProps = {
   searchParams?: Promise<{
     deviceAdded?: string;
+    deviceRemoved?: string;
     waitlistAdded?: string;
     tab?: string;
   }>;
@@ -66,6 +68,7 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
   const profile = await getCurrentUserProfile();
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const deviceAdded = resolvedSearchParams?.deviceAdded === "1";
+  const deviceRemoved = resolvedSearchParams?.deviceRemoved === "1";
   const waitlistAdded = resolvedSearchParams?.waitlistAdded === "1";
   const activeTab: ProfileTab = isProfileTab(resolvedSearchParams?.tab) ? resolvedSearchParams.tab : "overview";
   const displayName = [profile?.firstName, profile?.lastName].filter(Boolean).join(" ") || profile?.username || "Пользователь";
@@ -105,6 +108,12 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
               <span className="muted">Теперь для него сразу доступны оценка и рекомендации по апгрейду.</span>
             </div>
           ) : null}
+          {deviceRemoved ? (
+            <div className="profile-success-banner glass">
+              <strong>Устройство удалено из профиля.</strong>
+              <span className="muted">Вы можете добавить его снова позже или сохранить другое устройство.</span>
+            </div>
+          ) : null}
           {waitlistAdded ? (
             <div className="profile-success-banner glass">
               <strong>Запрос добавлен в список ожидания.</strong>
@@ -128,35 +137,37 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
           </div>
 
           <div className="profile-shell">
-            <div className="glass" style={{ padding: 24, display: "grid", gap: 18 }}>
-              <div>
-                <h2 style={{ marginBottom: 6 }}>{displayName}</h2>
-                <div className="muted">Телефон: {displayPhone}</div>
-                {profile.username ? <div className="muted">@{profile.username}</div> : null}
-              </div>
+            {activeTab === "overview" ? (
+              <div className="glass profile-overview-panel" style={{ padding: 24, display: "grid", gap: 18 }}>
+                <div>
+                  <h2 style={{ marginBottom: 6 }}>{displayName}</h2>
+                  <div className="muted">Телефон: {displayPhone}</div>
+                  {profile.username ? <div className="muted">@{profile.username}</div> : null}
+                </div>
 
-              <div className="glass" style={{ padding: 18, display: "grid", gap: 8 }}>
-                <div className="section-label">Баланс</div>
-                <strong style={{ fontSize: "2rem" }}>{profile.loyaltyPoints} баллов</strong>
-                <div className="muted">За завершённые заказы начисляется 1% кешбэка баллами.</div>
-              </div>
+                <div className="glass profile-overview-card" style={{ padding: 18, display: "grid", gap: 8 }}>
+                  <div className="section-label">Баланс</div>
+                  <strong style={{ fontSize: "2rem" }}>{profile.loyaltyPoints} баллов</strong>
+                  <div className="muted">За завершённые заказы начисляется 1% кешбэка баллами.</div>
+                </div>
 
-              <div className="glass" style={{ padding: 18, display: "grid", gap: 8 }}>
-                <div className="section-label">Ваш промокод</div>
-                <strong style={{ fontSize: "1.4rem" }}>{profile.referralPromoCode?.code ?? "Будет создан автоматически"}</strong>
-                <div className="muted">
-                  {profile.referralPromoCode?.rewardDescription ?? "Промокод появится после первой авторизации."}
+                <div className="glass profile-overview-card" style={{ padding: 18, display: "grid", gap: 8 }}>
+                  <div className="section-label">Ваш промокод</div>
+                  <strong style={{ fontSize: "1.4rem" }}>{profile.referralPromoCode?.code ?? "Будет создан автоматически"}</strong>
+                  <div className="muted">
+                    {profile.referralPromoCode?.rewardDescription ?? "Промокод появится после первой авторизации."}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  <Link className="button button-primary" href="/catalog">Перейти в каталог</Link>
+                  {canOpenAdmin ? <Link className="button button-secondary" href="/admin">Открыть админку</Link> : null}
+                  <form action="/api/auth/logout" method="post">
+                    <button className="button button-secondary" type="submit">Выйти</button>
+                  </form>
                 </div>
               </div>
-
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                <Link className="button button-primary" href="/catalog">Перейти в каталог</Link>
-                {canOpenAdmin ? <Link className="button button-secondary" href="/admin">Открыть админку</Link> : null}
-                <form action="/api/auth/logout" method="post">
-                  <button className="button button-secondary" type="submit">Выйти</button>
-                </form>
-              </div>
-            </div>
+            ) : null}
 
             <div className="glass profile-tabs-panel">
               <div className="profile-tab-content">
@@ -299,6 +310,12 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
 
                             <div className="actions">
                               <Link className="button button-secondary button-sm" href={`/profile/devices/add?deviceId=${device.id}` as never}>Переоценить в профиле</Link>
+                              <form action={removeProfileDeviceAction}>
+                                <input type="hidden" name="deviceId" value={device.id} />
+                                <ConfirmButton className="button button-secondary button-sm" message={`Удалить устройство «${getDeviceTitle(device)}» из профиля?`}>
+                                  Удалить устройство
+                                </ConfirmButton>
+                              </form>
                             </div>
                           </article>
                         ))}

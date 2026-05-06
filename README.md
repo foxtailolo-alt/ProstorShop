@@ -203,6 +203,7 @@ infra/
 - `/admin/products` now supports server-side `category` and `status` filters with pagination preserving active params.
 - Storefront coverflow uses a seamless loop with duplicated slides to avoid visible edge-jumps; non-active cards remain opaque and cards use solid white backgrounds.
 - Bestsellers cards now also use solid white backgrounds and a more compact layout without stock text.
+- Competitor pricing sync now auto-installs Playwright Chromium on first server run if it is missing and uses a project-local browser cache instead of a user-specific home cache.
 
 ### Next Recommended Steps
 

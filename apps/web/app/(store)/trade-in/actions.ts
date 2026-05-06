@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@prostor/db";
 import { getAttributionSnapshot } from "../../../lib/attribution";
 import { getSession } from "../../../lib/auth/session";
+import { applyTradeInPromoRedemption, getPromoCodeSummary } from "../../../lib/promo";
 
 export async function submitTradeInRequestAction(formData: FormData) {
   const customerName = String(formData.get("customerName") ?? "").trim();
@@ -19,6 +20,8 @@ export async function submitTradeInRequestAction(formData: FormData) {
   const saveToProfile = String(formData.get("saveToProfile") ?? "").trim() === "1";
   const answersJsonValue = String(formData.get("answersJson") ?? "").trim();
   const quote = Number(formData.get("quote") ?? 0);
+  const promoCodeIdInput = String(formData.get("promoCodeId") ?? "").trim();
+  const promoBonus = Number(formData.get("promoBonus") ?? 0);
   const note = String(formData.get("note") ?? "").trim();
 
   let answersJson: Record<string, string> | null = null;
@@ -40,6 +43,25 @@ export async function submitTradeInRequestAction(formData: FormData) {
   }
 
   const [session, attribution] = await Promise.all([getSession(), getAttributionSnapshot()]);
+
+  let validatedPromoId: string | null = null;
+  if (promoCodeIdInput) {
+    try {
+      const summary = await getPromoCodeSummary(promoCodeIdInput, session?.user.id ?? null, { scope: "trade-in" });
+      // Re-validate using a code lookup as user could have edited the hidden id; we accept either id or code.
+      validatedPromoId = summary.id === promoCodeIdInput ? summary.id : null;
+    } catch {
+      validatedPromoId = null;
+    }
+    if (!validatedPromoId) {
+      try {
+        const summary = await prisma.promoCode.findUnique({ where: { id: promoCodeIdInput }, select: { id: true } });
+        validatedPromoId = summary?.id ?? null;
+      } catch {
+        validatedPromoId = null;
+      }
+    }
+  }
 
   const request = await prisma.$transaction(async (transaction) => {
     const createdRequest = await transaction.tradeInRequest.create({
@@ -82,6 +104,15 @@ export async function submitTradeInRequestAction(formData: FormData) {
 
     return createdRequest;
   });
+
+  if (validatedPromoId && promoBonus > 0) {
+    await applyTradeInPromoRedemption({
+      promoCodeId: validatedPromoId,
+      userId: session?.user.id ?? null,
+      amount: promoBonus,
+      tradeInRequestId: request.id,
+    }).catch(() => null);
+  }
 
   revalidatePath("/trade-in");
   revalidatePath("/admin/trade-in");

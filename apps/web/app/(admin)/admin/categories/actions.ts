@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@prostor/db";
+import { prisma, type Prisma } from "@prostor/db";
 import { logAdminActivity } from "../../../../lib/audit";
 import { requirePermission } from "../../../../lib/auth/session";
+import { saveCategoryImage } from "../../../../lib/media";
 
 const cyrMap: Record<string, string> = {
   а:"a",б:"b",в:"v",г:"g",д:"d",е:"e",ё:"yo",ж:"zh",з:"z",и:"i",й:"y",к:"k",
@@ -27,6 +28,40 @@ function parseValues(value: string) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+const transientPrismaErrorCodes = new Set(["P1001", "P1002", "P1017"]);
+
+function isTransientPrismaConnectionError(error: unknown) {
+  const code = typeof error === "object" && error && "code" in error && typeof error.code === "string"
+    ? error.code
+    : null;
+  const message = error instanceof Error ? error.message : "";
+
+  return Boolean(
+    (code && transientPrismaErrorCodes.has(code))
+    || /Can't reach database server|Server has closed the connection|Connection.*closed|Timed out/i.test(message),
+  );
+}
+
+async function withTransientDatabaseRetry<T>(operation: () => Promise<T>) {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+
+      if (!isTransientPrismaConnectionError(error) || attempt === 2) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+    }
+  }
+
+  throw lastError;
 }
 
 async function normalizeSiblingCategoryPositions(parentId: string | null) {
@@ -253,6 +288,69 @@ export async function reorderCategoryAction(formData: FormData) {
   revalidatePath("/admin");
   revalidatePath("/admin/products");
   revalidatePath("/catalog");
+}
+
+export async function updateCategoryImageAction(formData: FormData) {
+  await requirePermission("categories", "write");
+
+  const categoryId = String(formData.get("categoryId") ?? "").trim();
+  const categorySlug = String(formData.get("categorySlug") ?? "").trim();
+  const categoryName = String(formData.get("categoryName") ?? "").trim();
+
+  if (!categoryId) {
+    throw new Error("Category id is required.");
+  }
+
+  const imageFile = formData.get("image") as File | null;
+
+  if (!imageFile || imageFile.size === 0) {
+    throw new Error("Выберите изображение перед сохранением.");
+  }
+
+  const fallbackSlug = categorySlug || `category-${categoryId}`;
+  const imageUrl = await saveCategoryImage(imageFile, fallbackSlug);
+
+  try {
+    const updatedCategory = await withTransientDatabaseRetry(() =>
+      prisma.category.update({
+        where: { id: categoryId },
+        data: { imageUrl },
+        select: { id: true, slug: true, name: true },
+      }),
+    );
+
+    await withTransientDatabaseRetry(() =>
+      logAdminActivity({
+        entityType: "category",
+        entityId: categoryId,
+        action: "category.image.updated",
+        summary: `Изображение категории обновлено: ${updatedCategory.name}`,
+        metadata: { imageUrl },
+      }),
+    );
+
+    revalidatePath("/admin/categories");
+    revalidatePath("/admin/marketing/homepage");
+    revalidatePath("/");
+    revalidatePath("/catalog");
+    revalidatePath(`/catalog/${updatedCategory.slug}`);
+    return;
+  } catch (error) {
+    if (isTransientPrismaConnectionError(error)) {
+      throw new Error("Не удалось связаться с базой данных. Повторите сохранение изображения через несколько секунд.");
+    }
+
+    if (
+      typeof error === "object"
+      && error
+      && "code" in error
+      && (error as Prisma.PrismaClientKnownRequestError).code === "P2025"
+    ) {
+      throw new Error(`Категория ${categoryName || "для обновления"} не найдена.`);
+    }
+
+    throw error;
+  }
 }
 
 export async function upsertAttributeAction(formData: FormData) {

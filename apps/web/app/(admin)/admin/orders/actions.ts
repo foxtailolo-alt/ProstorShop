@@ -5,6 +5,7 @@ import { prisma } from "@prostor/db";
 import { logAdminActivity } from "../../../../lib/audit";
 import { requirePermission } from "../../../../lib/auth/session";
 import { fulfillUsedDeviceWaitlistEntriesForOrder } from "../../../../lib/used-device-waitlist-notifications";
+import { createAccessoryHintsForOrder } from "../../../../lib/accessory-notifications";
 
 const allowedStatuses = new Set(["pending", "contacted", "confirmed", "completed", "cancelled"]);
 
@@ -98,6 +99,7 @@ export async function updateOrderStatusAction(formData: FormData) {
 
   if (status === "completed") {
     await fulfillUsedDeviceWaitlistEntriesForOrder(orderId).catch(() => null);
+    await createAccessoryHintsForOrder(orderId).catch(() => null);
   }
 
   await logAdminActivity({

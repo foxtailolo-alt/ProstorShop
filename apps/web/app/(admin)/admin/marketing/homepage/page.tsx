@@ -1,8 +1,6 @@
 import { prisma } from "@prostor/db";
 import { redirect } from "next/navigation";
 import { isMarketingMode } from "../../../../../lib/auth/marketing";
-import { loadCategoryTree, buildFlatCategoryOptions } from "../../../../../lib/data/catalog";
-import { CategoryImageCard } from "../../../../../components/admin/category-image-card";
 import { ConfirmButton } from "../../../../../components/admin/confirm-button";
 import { SearchableProductPicker } from "../../../../../components/admin/searchable-product-picker";
 import {
@@ -12,14 +10,13 @@ import {
   removeItemFromSectionAction,
   toggleItemHighlightAction,
   reorderItemAction,
-  updateCategoryImageAction,
 } from "./actions";
 
 export default async function AdminHomepagePage() {
   const marketingMode = await isMarketingMode();
   if (!marketingMode) redirect("/admin");
 
-  const [sections, dbProducts, categoryTree] = await Promise.all([
+  const [sections, dbProducts] = await Promise.all([
     prisma.homepageSection.findMany({
       orderBy: { sortOrder: "asc" },
       include: {
@@ -33,10 +30,7 @@ export default async function AdminHomepagePage() {
       orderBy: { name: "asc" },
       select: { id: true, name: true, brand: true, price: true, imageUrl: true, imageUrls: true },
     }),
-    loadCategoryTree(),
   ]);
-
-  const categoryOptions = buildFlatCategoryOptions(categoryTree);
 
   return (
     <main>
@@ -215,40 +209,6 @@ export default async function AdminHomepagePage() {
           </section>
         );
       })}
-
-      {/* Изображения категорий */}
-      <section style={{ marginTop: 24 }} className="card glass">
-        <div className="section-label">Изображения категорий</div>
-        <p style={{ fontSize: 13, color: "var(--muted)", margin: "0 0 12px" }}>
-          Загрузите изображения для отображения в блоке категорий на главной странице.
-        </p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 14 }}>
-          {categoryOptions.map((cat) => {
-            const treeNode = findCategoryInTree(categoryTree, cat.id);
-            return (
-              <CategoryImageCard
-                key={cat.id}
-                categoryId={cat.id}
-                label={cat.label}
-                imageUrl={treeNode?.imageUrl ?? null}
-                action={updateCategoryImageAction}
-              />
-            );
-          })}
-        </div>
-      </section>
     </main>
   );
-}
-
-function findCategoryInTree(
-  tree: { id: string; imageUrl: string | null; children: typeof tree }[],
-  id: string,
-): { imageUrl: string | null } | null {
-  for (const node of tree) {
-    if (node.id === id) return node;
-    const found = findCategoryInTree(node.children, id);
-    if (found) return found;
-  }
-  return null;
 }

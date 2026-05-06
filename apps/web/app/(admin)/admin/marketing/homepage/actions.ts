@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@prostor/db";
 import { logAdminActivity } from "../../../../../lib/audit";
 import { requirePermission } from "../../../../../lib/auth/session";
-import { saveCategoryImage } from "../../../../../lib/media";
 
 // --- Homepage Sections ---
 
@@ -156,40 +155,5 @@ export async function reorderItemAction(formData: FormData) {
   ]);
 
   revalidatePath("/admin/marketing/homepage");
-  revalidatePath("/");
-}
-
-// --- Category Image ---
-
-export async function updateCategoryImageAction(formData: FormData) {
-  await requirePermission("banners", "write");
-
-  const categoryId = String(formData.get("categoryId") ?? "").trim();
-  if (!categoryId) return;
-
-  const category = await prisma.category.findUnique({ where: { id: categoryId } });
-  if (!category) return;
-
-  const imageFile = formData.get("image") as File | null;
-  let imageUrl = category.imageUrl;
-
-  if (imageFile && imageFile.size > 0) {
-    imageUrl = await saveCategoryImage(imageFile, category.slug);
-  }
-
-  await prisma.category.update({
-    where: { id: categoryId },
-    data: { imageUrl },
-  });
-
-  await logAdminActivity({
-    entityType: "category",
-    entityId: categoryId,
-    action: "update",
-    summary: `Изображение категории обновлено: ${category.name}`,
-  });
-
-  revalidatePath("/admin/marketing/homepage");
-  revalidatePath("/admin/categories");
   revalidatePath("/");
 }

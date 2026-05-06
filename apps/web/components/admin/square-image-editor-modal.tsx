@@ -92,22 +92,16 @@ export function SquareImageEditorModal({
     };
   }
 
-  function applyCenterSnap(next: { left: number; top: number }, size: Size | null) {
+  function getCenterGuides(next: { left: number; top: number }, size: Size | null) {
     if (!size) {
-      return { position: next, snap: { x: false, y: false } };
+      return { x: false, y: false };
     }
 
     const targetLeft = (outputSize - size.width) / 2;
     const targetTop = (outputSize - size.height) / 2;
-    const snapX = Math.abs(next.left - targetLeft) <= centerSnapThreshold;
-    const snapY = Math.abs(next.top - targetTop) <= centerSnapThreshold;
-
     return {
-      position: {
-        left: snapX ? targetLeft : next.left,
-        top: snapY ? targetTop : next.top,
-      },
-      snap: { x: snapX, y: snapY },
+      x: Math.abs(next.left - targetLeft) <= centerSnapThreshold,
+      y: Math.abs(next.top - targetTop) <= centerSnapThreshold,
     };
   }
 
@@ -122,14 +116,14 @@ export function SquareImageEditorModal({
     const centerY = position.top + renderedSize.height / 2;
 
     const clampedZoom = clamp(nextZoom, minZoom, maxZoom);
-    const snapped = applyCenterSnap(clampPosition({
+    const nextPosition = clampPosition({
       left: centerX - nextWidth / 2,
       top: centerY - nextHeight / 2,
-    }, { width: nextWidth, height: nextHeight }), { width: nextWidth, height: nextHeight });
+    }, { width: nextWidth, height: nextHeight });
 
     setZoom(clampedZoom);
-    setPosition(snapped.position);
-    setSnapAxis(snapped.snap);
+    setPosition(nextPosition);
+    setSnapAxis(getCenterGuides(nextPosition, { width: nextWidth, height: nextHeight }));
   }
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
@@ -153,13 +147,13 @@ export function SquareImageEditorModal({
     const dx = (event.clientX - dragStateRef.current.x) * ratio;
     const dy = (event.clientY - dragStateRef.current.y) * ratio;
 
-    const snapped = applyCenterSnap(clampPosition({
+    const nextPosition = clampPosition({
       left: dragStateRef.current.left + dx,
       top: dragStateRef.current.top + dy,
-    }, renderedSize), renderedSize);
+    }, renderedSize);
 
-    setPosition(snapped.position);
-    setSnapAxis(snapped.snap);
+    setPosition(nextPosition);
+    setSnapAxis(getCenterGuides(nextPosition, renderedSize));
   }
 
   function handlePointerUp(event: React.PointerEvent<HTMLDivElement>) {

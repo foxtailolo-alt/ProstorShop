@@ -39,6 +39,7 @@ export const adminResources = [
   "settings",
   "activity",
   "marketing",
+  "promo-codes",
 ] as const;
 
 export type AdminResource = (typeof adminResources)[number];
@@ -53,16 +54,16 @@ const rolePermissions: Record<AdminRole, Record<AdminAction, AdminResource[]>> =
   },
   manager: {
     read: [...adminResources],
-    write: ["products", "categories", "banners", "orders", "trade-in", "service", "telegram-posts", "marketing"],
-    delete: ["products", "categories", "banners", "trade-in"],
+    write: ["products", "categories", "banners", "orders", "trade-in", "service", "telegram-posts", "marketing", "promo-codes"],
+    delete: ["products", "categories", "banners", "trade-in", "promo-codes"],
   },
   editor: {
-    read: ["products", "categories", "banners", "orders", "trade-in", "service", "activity"],
+    read: ["products", "categories", "banners", "orders", "trade-in", "service", "activity", "promo-codes"],
     write: ["products", "categories", "banners"],
     delete: ["products", "banners"],
   },
   viewer: {
-    read: ["products", "categories", "banners", "orders", "trade-in", "service", "activity"],
+    read: ["products", "categories", "banners", "orders", "trade-in", "service", "activity", "promo-codes"],
     write: [],
     delete: [],
   },

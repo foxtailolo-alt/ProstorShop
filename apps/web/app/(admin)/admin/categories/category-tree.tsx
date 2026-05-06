@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { CategoryTreeNode } from "../../../../lib/data/catalog";
-import { upsertCategoryAction, deleteCategoryAction, reorderCategoryAction } from "./actions";
+import { CategoryImageCard } from "../../../../components/admin/category-image-card";
+import { upsertCategoryAction, deleteCategoryAction, reorderCategoryAction, updateCategoryImageAction } from "./actions";
 import { ConfirmButton } from "../../../../components/admin/confirm-button";
 
 const cyrMap: Record<string, string> = {
@@ -353,6 +354,16 @@ function CategoryForm({
           )}
         </div>
       </form>
+      {category && (
+        <CategoryImageCard
+          categoryId={category.id}
+          categorySlug={category.slug}
+          categoryName={category.name}
+          label="Изображение категории"
+          imageUrl={category.imageUrl}
+          action={updateCategoryImageAction}
+        />
+      )}
       {category && (
         <div className="admin-tree-actions" style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--line)" }}>
           <form action={deleteCategoryAction} style={{ display: "inline" }}>

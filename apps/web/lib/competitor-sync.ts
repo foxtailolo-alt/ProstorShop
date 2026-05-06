@@ -1,6 +1,17 @@
+import { execFile } from "node:child_process";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { promisify } from "node:util";
 import { chromium, type Browser, type Page } from "playwright";
 import { buildTargetPriceFromCompetitor } from "./competitor-pricing";
 import { normalizeProductOptionsOrder } from "./product-options-order";
+
+const require = createRequire(import.meta.url);
+const execFileAsync = promisify(execFile);
+
+if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = "0";
+}
 
 export type ProductOptionsData = {
   groups: Array<{ name: string; values: string[] }>;
@@ -68,6 +79,7 @@ export type CompetitorSyncProposal = {
 
 const COMPETITOR_SITEMAP_URL = "https://resale52.ru/sitemap-store.xml";
 const PAGE_TIMEOUT_MS = 90_000;
+let chromiumInstallPromise: Promise<void> | null = null;
 
 const COLOR_ALIASES: Record<string, string[]> = {
   black: ["black", "черный", "чёрный", "черные", "чёрные", "chernyy", "chernye", "темный", "space black", "graphite", "midnight"],
@@ -416,13 +428,60 @@ export async function fetchCompetitorSitemapUrls() {
 }
 
 async function launchCompetitorBrowser() {
+  let defaultLaunchError: unknown = null;
+
   try {
     return await chromium.launch({
       channel: process.env.PLAYWRIGHT_CHROME_CHANNEL ?? "chrome",
       headless: true,
     });
   } catch {
+    try {
+      return await chromium.launch({ headless: true });
+    } catch (error) {
+      defaultLaunchError = error;
+    }
+  }
+
+  if (isMissingPlaywrightBrowserError(defaultLaunchError)) {
+    await ensurePlaywrightChromiumInstalled();
     return chromium.launch({ headless: true });
+  }
+
+  throw defaultLaunchError instanceof Error
+    ? defaultLaunchError
+    : new Error("Не удалось запустить браузер для сбора цен конкурентов.");
+}
+
+function isMissingPlaywrightBrowserError(error: unknown) {
+  return error instanceof Error
+    && /Executable doesn't exist|Please run the following command.*playwright install/i.test(error.message);
+}
+
+async function ensurePlaywrightChromiumInstalled() {
+  if (!chromiumInstallPromise) {
+    chromiumInstallPromise = (async () => {
+      const playwrightPackageJsonPath = require.resolve("playwright/package.json");
+      const cliPath = join(dirname(playwrightPackageJsonPath), "cli.js");
+
+      await execFileAsync(process.execPath, [cliPath, "install", "chromium"], {
+        env: {
+          ...process.env,
+          CI: process.env.CI ?? "1",
+        },
+      });
+    })().finally(() => {
+      chromiumInstallPromise = null;
+    });
+  }
+
+  try {
+    await chromiumInstallPromise;
+  } catch (error) {
+    throw new Error(
+      "На сервере не установлен Chromium для Playwright. Автоматическая установка не удалась. Выполните `pnpm --filter @prostor/web exec playwright install chromium` на хосте приложения.",
+      { cause: error },
+    );
   }
 }
 

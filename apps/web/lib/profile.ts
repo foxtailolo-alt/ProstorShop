@@ -105,6 +105,14 @@ export async function getCurrentUserProfile() {
         },
         userDevices: {
           orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+          include: {
+            accessories: true,
+            tradeInBonus: {
+              include: {
+                promoCode: true,
+              },
+            },
+          },
         },
         usedDeviceWaitlistEntries: {
           orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
@@ -166,6 +174,20 @@ export async function getCurrentUserProfile() {
           : {},
       tradeInRequestId: device.tradeInRequestId,
       orderId: device.orderId,
+      accessories: device.accessories.map((accessory) => ({
+        id: accessory.id,
+        kind: accessory.kind,
+        sourceKind: accessory.sourceKind,
+        productName: accessory.productName,
+        imageUrl: accessory.imageUrl,
+      })),
+      tradeInBonus: device.tradeInBonus
+        ? {
+            amount: Number(device.tradeInBonus.amount),
+            promoCode: device.tradeInBonus.promoCode.code,
+            promoCodeId: device.tradeInBonus.promoCodeId,
+          }
+        : null,
       upgradeSuggestions: buildUpgradeSuggestions(
         {
           categoryCode: device.categoryCode,

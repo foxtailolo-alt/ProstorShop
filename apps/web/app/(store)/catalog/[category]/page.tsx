@@ -137,7 +137,13 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                   href={`/catalog/${child.slug}`}
                   className={`category-card glass animate-fade-up delay-${Math.min(i + 1, 8)}`}
                 >
-                  <span className="category-card-icon">📁</span>
+                  {child.imageUrl ? (
+                    <div className="category-card-media">
+                      <img src={child.imageUrl} alt={child.name} className="category-card-image" loading="lazy" />
+                    </div>
+                  ) : (
+                    <span className="category-card-icon">📁</span>
+                  )}
                   <span className="category-card-name">{child.name}</span>
                   <span className="category-card-count">
                     {child.children.length > 0

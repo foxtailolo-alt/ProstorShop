@@ -37,6 +37,19 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
     };
   }, [lightboxOpen, closeLightbox, goTo]);
 
+  useEffect(() => {
+    if (!lightboxOpen) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [lightboxOpen]);
+
   function handleTouchStart(e: React.TouchEvent) {
     touchStartRef.current = e.touches[0]?.clientX ?? 0;
   }
@@ -91,40 +104,67 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
       {lightboxOpen ? (
         <div className="lightbox-overlay" onClick={closeLightbox}>
           <div
-            className="lightbox-content"
+            className="lightbox-shell"
             onClick={(e) => e.stopPropagation()}
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
           >
-            {images.length > 1 ? (
-              <button
-                type="button"
-                className="lightbox-arrow lightbox-arrow-prev"
-                onClick={() => goTo(-1)}
-              >
-                ‹
+            <div className="lightbox-topbar">
+              <div className="lightbox-meta">
+                <strong>{productName}</strong>
+                <span>{activeIndex + 1} / {images.length}</span>
+              </div>
+              <button type="button" className="lightbox-close" onClick={closeLightbox} aria-label="Закрыть просмотр">
+                ✕
               </button>
-            ) : null}
-            <img
-              src={images[activeIndex]}
-              alt={`${productName} ${activeIndex + 1}`}
-              className="lightbox-image"
-            />
+            </div>
+
+            <div className="lightbox-stage">
+              {images.length > 1 ? (
+                <button
+                  type="button"
+                  className="lightbox-arrow lightbox-arrow-prev"
+                  onClick={() => goTo(-1)}
+                  aria-label="Предыдущее изображение"
+                >
+                  ‹
+                </button>
+              ) : null}
+
+              <div className="lightbox-image-frame">
+                <img
+                  src={images[activeIndex]}
+                  alt={`${productName} ${activeIndex + 1}`}
+                  className="lightbox-image"
+                />
+              </div>
+
+              {images.length > 1 ? (
+                <button
+                  type="button"
+                  className="lightbox-arrow lightbox-arrow-next"
+                  onClick={() => goTo(1)}
+                  aria-label="Следующее изображение"
+                >
+                  ›
+                </button>
+              ) : null}
+            </div>
+
             {images.length > 1 ? (
-              <button
-                type="button"
-                className="lightbox-arrow lightbox-arrow-next"
-                onClick={() => goTo(1)}
-              >
-                ›
-              </button>
-            ) : null}
-            <button type="button" className="lightbox-close" onClick={closeLightbox}>
-              ✕
-            </button>
-            {images.length > 1 ? (
-              <div className="lightbox-counter">
-                {activeIndex + 1} / {images.length}
+              <div className="lightbox-thumb-rail" role="tablist" aria-label="Изображения товара">
+                {images.map((url, index) => (
+                  <button
+                    key={`${url}-${index}`}
+                    type="button"
+                    className={`lightbox-thumb ${index === activeIndex ? "lightbox-thumb-active" : ""}`}
+                    onClick={() => setActiveIndex(index)}
+                    aria-label={`Открыть изображение ${index + 1}`}
+                    aria-selected={index === activeIndex}
+                  >
+                    <img src={url} alt={`${productName} превью ${index + 1}`} loading="lazy" />
+                  </button>
+                ))}
               </div>
             ) : null}
           </div>

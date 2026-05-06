@@ -199,3 +199,112 @@ export async function addPurchasedProfileDeviceAction(formData: FormData) {
   revalidatePath("/profile");
   redirect("/profile?tab=devices&deviceAdded=1");
 }
+
+export async function removeProfileDeviceAction(formData: FormData) {
+  const session = await getSession();
+
+  if (!session) {
+    throw new Error("Авторизуйтесь, чтобы удалить устройство.");
+  }
+
+  const deviceId = String(formData.get("deviceId") ?? "").trim();
+
+  if (!deviceId) {
+    throw new Error("Не удалось определить устройство для удаления.");
+  }
+
+  const device = await prisma.userDevice.findFirst({
+    where: {
+      id: deviceId,
+      userId: session.user.id,
+    },
+    select: { id: true },
+  });
+
+  if (!device) {
+    throw new Error("Устройство не найдено в вашем профиле.");
+  }
+
+  await prisma.userDevice.delete({ where: { id: device.id } });
+
+  revalidatePath("/profile");
+  redirect("/profile?tab=devices&deviceRemoved=1");
+}
+
+export async function attachAccessoryActionFromProfile(formData: FormData) {
+  const { attachAccessoryToDevice, getSupportedAccessoriesForCategory } = await import(
+    "../../../lib/device-accessories"
+  );
+
+  const session = await getSession();
+  if (!session) {
+    throw new Error("Авторизуйтесь, чтобы добавить аксессуар.");
+  }
+
+  const userDeviceId = String(formData.get("userDeviceId") ?? "").trim();
+  const kind = String(formData.get("kind") ?? "").trim() as "case" | "glass";
+  const orderItemId = String(formData.get("orderItemId") ?? "").trim() || null;
+  const productId = String(formData.get("productId") ?? "").trim() || null;
+  const productName = String(formData.get("productName") ?? "").trim() || null;
+  const imageUrl = String(formData.get("imageUrl") ?? "").trim() || null;
+  const notificationId = String(formData.get("notificationId") ?? "").trim();
+
+  if (!userDeviceId || !kind) {
+    throw new Error("Не указано устройство или тип аксессуара.");
+  }
+
+  const device = await prisma.userDevice.findFirst({
+    where: { id: userDeviceId, userId: session.user.id },
+    select: { id: true, categoryCode: true },
+  });
+
+  if (!device) {
+    throw new Error("Устройство не найдено в вашем профиле.");
+  }
+
+  if (!getSupportedAccessoriesForCategory(device.categoryCode).includes(kind)) {
+    throw new Error("Для этого устройства такой аксессуар не поддерживается.");
+  }
+
+  await attachAccessoryToDevice({
+    userDeviceId: device.id,
+    kind,
+    sourceKind: orderItemId ? "purchase" : "manual",
+    orderItemId,
+    productId,
+    productName,
+    imageUrl,
+  });
+
+  if (notificationId) {
+    await prisma.profileNotification.updateMany({
+      where: { id: notificationId, userId: session.user.id },
+      data: { isViewed: true, viewedAt: new Date() },
+    });
+  }
+
+  revalidatePath("/profile");
+}
+
+export async function removeAccessoryActionFromProfile(formData: FormData) {
+  const session = await getSession();
+  if (!session) {
+    throw new Error("Авторизуйтесь, чтобы изменить аксессуары.");
+  }
+
+  const accessoryId = String(formData.get("accessoryId") ?? "").trim();
+  if (!accessoryId) throw new Error("Не указан аксессуар.");
+
+  const accessory = await prisma.userDeviceAccessory.findFirst({
+    where: {
+      id: accessoryId,
+      userDevice: { userId: session.user.id },
+    },
+    select: { id: true },
+  });
+
+  if (!accessory) throw new Error("Аксессуар не найден.");
+
+  await prisma.userDeviceAccessory.delete({ where: { id: accessoryId } });
+  revalidatePath("/profile");
+}

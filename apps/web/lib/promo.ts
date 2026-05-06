@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { prisma } from "@prostor/db";
 
 const PROMO_COOKIE_NAME = "prostor_promo";
@@ -6,12 +6,21 @@ const PROMO_DURATION_MS = 1000 * 60 * 60 * 24 * 14;
 const REFERRAL_REWARD_DESCRIPTION = "Стекло + чехол в подарок";
 const REFERRAL_OWNER_CASHBACK_PERCENT = 1;
 
+export const PROMO_SCOPE_CART = "cart";
+export const PROMO_SCOPE_TRADE_IN = "trade-in";
+export const PROMO_SCOPE_ANY = "any";
+
+export type PromoScope = "cart" | "trade-in" | "any";
+
 type DecimalLike = { toString(): string } | number;
 
 export type PromoCodeSummary = {
   id: string;
   code: string;
   type: string;
+  scope: PromoScope;
+  discountKind: string;
+  discountValue: number;
   rewardDescription: string | null;
   ownerCashbackPercent: number;
   ownerUserId: string | null;
@@ -120,6 +129,9 @@ function toPromoSummary(record: {
   id: string;
   code: string;
   type: string;
+  scope?: string | null;
+  discountKind?: string | null;
+  discountValue?: DecimalLike | null;
   rewardDescription: string | null;
   ownerCashbackPercent: DecimalLike | null;
   ownerUserId: string | null;
@@ -128,13 +140,20 @@ function toPromoSummary(record: {
     id: record.id,
     code: record.code,
     type: record.type,
+    scope: ((record.scope as PromoScope | null) ?? "cart") as PromoScope,
+    discountKind: record.discountKind ?? "reward",
+    discountValue: Number(record.discountValue ?? 0),
     rewardDescription: record.rewardDescription,
     ownerCashbackPercent: Number(record.ownerCashbackPercent ?? 0),
     ownerUserId: record.ownerUserId,
   } satisfies PromoCodeSummary;
 }
 
-export async function getPromoCodeSummary(code: string, userId?: string | null) {
+export async function getPromoCodeSummary(
+  code: string,
+  userId?: string | null,
+  options: { scope?: PromoScope } = {},
+) {
   const normalizedCode = normalizePromoCode(code);
 
   if (!normalizedCode) {
@@ -147,12 +166,18 @@ export async function getPromoCodeSummary(code: string, userId?: string | null) 
       id: true,
       code: true,
       type: true,
+      scope: true,
+      discountKind: true,
+      discountValue: true,
       rewardDescription: true,
       ownerCashbackPercent: true,
       ownerUserId: true,
       isActive: true,
       usageLimit: true,
       usageCount: true,
+      perUserLimit: true,
+      startsAt: true,
+      endsAt: true,
     },
   });
 
@@ -160,8 +185,26 @@ export async function getPromoCodeSummary(code: string, userId?: string | null) 
     throw new Error("Промокод не найден или отключён.");
   }
 
+  const now = new Date();
+
+  if (promoCode.startsAt && promoCode.startsAt > now) {
+    throw new Error("Промокод ещё не активен.");
+  }
+
+  if (promoCode.endsAt && promoCode.endsAt < now) {
+    throw new Error("Срок действия промокода истёк.");
+  }
+
   if (promoCode.usageLimit !== null && promoCode.usageCount >= promoCode.usageLimit) {
     throw new Error("Лимит применений этого промокода уже исчерпан.");
+  }
+
+  const requestedScope = options.scope;
+  if (requestedScope && promoCode.scope !== "any" && promoCode.scope !== requestedScope) {
+    if (requestedScope === "trade-in") {
+      throw new Error("Этот промокод нельзя применить к Trade-in оценке.");
+    }
+    throw new Error("Этот промокод нельзя применить в корзине.");
   }
 
   if (userId && promoCode.ownerUserId === userId) {
@@ -182,6 +225,17 @@ export async function getPromoCodeSummary(code: string, userId?: string | null) 
     }
   }
 
+  if (userId && promoCode.perUserLimit && promoCode.perUserLimit > 0) {
+    const [orderUses, tradeInUses] = await Promise.all([
+      prisma.order.count({ where: { userId, appliedPromoCodeId: promoCode.id } }),
+      prisma.tradeInPromoRedemption.count({ where: { userId, promoCodeId: promoCode.id } }),
+    ]);
+
+    if (orderUses + tradeInUses >= promoCode.perUserLimit) {
+      throw new Error("Вы уже использовали этот промокод максимальное число раз.");
+    }
+  }
+
   return toPromoSummary(promoCode);
 }
 
@@ -197,6 +251,9 @@ export async function getUserReferralPromoCode(userId: string) {
       id: true,
       code: true,
       type: true,
+      scope: true,
+      discountKind: true,
+      discountValue: true,
       rewardDescription: true,
       ownerCashbackPercent: true,
       ownerUserId: true,
@@ -235,6 +292,8 @@ export async function ensureReferralPromoCodeForUser(input: {
         data: {
           code: candidate,
           type: "referral",
+          scope: "cart",
+          discountKind: "reward",
           ownerUserId: input.userId,
           rewardDescription: REFERRAL_REWARD_DESCRIPTION,
           ownerCashbackPercent: REFERRAL_OWNER_CASHBACK_PERCENT,
@@ -244,6 +303,9 @@ export async function ensureReferralPromoCodeForUser(input: {
           id: true,
           code: true,
           type: true,
+          scope: true,
+          discountKind: true,
+          discountValue: true,
           rewardDescription: true,
           ownerCashbackPercent: true,
           ownerUserId: true,
@@ -256,4 +318,52 @@ export async function ensureReferralPromoCodeForUser(input: {
     suffix += 1;
     candidate = `${basePrefix}-${suffix}`;
   }
+}
+
+const RANDOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+export function generateRandomPromoCode(prefix?: string, length = 8) {
+  const bytes = randomBytes(length);
+  let body = "";
+  for (let index = 0; index < length; index += 1) {
+    body += RANDOM_CODE_ALPHABET.charAt(bytes[index]! % RANDOM_CODE_ALPHABET.length);
+  }
+  const normalizedPrefix = normalizePromoCode(prefix ?? "");
+  return normalizedPrefix ? `${normalizedPrefix}-${body}` : body;
+}
+
+export async function createUniquePromoCode(prefix?: string, length = 8) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const candidate = generateRandomPromoCode(prefix, length);
+    const conflict = await prisma.promoCode.findUnique({
+      where: { code: candidate },
+      select: { id: true },
+    });
+    if (!conflict) {
+      return candidate;
+    }
+  }
+  throw new Error("Не удалось сгенерировать уникальный промокод.");
+}
+
+export async function applyTradeInPromoRedemption(input: {
+  promoCodeId: string;
+  userId: string | null;
+  amount: number;
+  tradeInRequestId?: string | null;
+}) {
+  await prisma.$transaction([
+    prisma.promoCode.update({
+      where: { id: input.promoCodeId },
+      data: { usageCount: { increment: 1 } },
+    }),
+    prisma.tradeInPromoRedemption.create({
+      data: {
+        promoCodeId: input.promoCodeId,
+        userId: input.userId,
+        amount: input.amount,
+        tradeInRequestId: input.tradeInRequestId ?? null,
+      },
+    }),
+  ]);
 }

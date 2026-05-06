@@ -30,6 +30,7 @@ model User {
   tradeInRequests  TradeInRequest[]
   serviceRequests  ServiceRequest[]
   competitorPriceSyncRuns CompetitorPriceSyncRun[]
+  legacyAvatar     LegacyUserAvatar? @relation("LegacyUserAvatar")
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 }
@@ -39,6 +40,22 @@ model Role {
   code        String           @unique
   name        String
   assignments RoleAssignment[]
+}
+
+model LegacyUserAvatar {
+  id         String   @id
+  userId     String   @unique
+  user       User     @relation("LegacyUserAvatar", fields: [userId], references: [id], onDelete: Cascade)
+  gender     String   @default("male")
+  hair       String   @default("short")
+  face       String   @default("neutral")
+  outfit     String   @default("graphite")
+  accent     String   @default("violet")
+  configJson Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+
+  @@map("UserAvatar")
 }
 
 model RoleAssignment {

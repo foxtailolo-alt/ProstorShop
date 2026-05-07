@@ -77,7 +77,6 @@ export async function POST(request: NextRequest) {
     model: "gpt-4o-mini",
     input: prompt,
     tools: [{ type: "web_search_preview" }],
-    temperature: 0,
   };
 
   const response = await fetch(getOpenAiEndpoint(), {

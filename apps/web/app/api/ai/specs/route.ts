@@ -120,7 +120,6 @@ export async function POST(request: NextRequest) {
     model: "gpt-4o-mini",
     input: prompt,
     tools: [{ type: "web_search_preview" }],
-    temperature: 0,
   };
 
   // Use Responses API with web_search tool for factual data

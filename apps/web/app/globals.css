@@ -94,10 +94,6 @@ img {
 
 .page { padding: 20px 0 80px; }
 
-html[data-telegram-mini-app="true"] .store-footer {
-  display: none;
-}
-
 html[data-telegram-mini-app="true"] {
   --telegram-mini-app-top-offset: calc(env(safe-area-inset-top) + 52px);
 }

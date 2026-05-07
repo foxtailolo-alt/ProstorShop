@@ -564,6 +564,180 @@ function normalizeBoolAnswer(value: string | undefined) {
   return value;
 }
 
+function extractGroupOptions(groupPayload: unknown) {
+  if (!groupPayload || typeof groupPayload !== "object" || Array.isArray(groupPayload)) {
+    return [] as Array<{ code: string; title: string; pricingPayload: Record<string, unknown> }>;
+  }
+
+  const vals = Array.isArray((groupPayload as { vals?: unknown[] }).vals)
+    ? (groupPayload as { vals: unknown[] }).vals
+    : [];
+
+  return vals.map((option) => normalizeOption(option));
+}
+
+function parseNumericOptionCode(code: string) {
+  const normalized = code.replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function pickClosestOptionCode(
+  questionCode: string,
+  desiredCode: string | undefined,
+  options: Array<{ code: string }>,
+) {
+  if (options.length === 0) {
+    return undefined;
+  }
+
+  if (desiredCode && options.some((option) => option.code === desiredCode)) {
+    return desiredCode;
+  }
+
+  if (questionCode === "cpu") {
+    if (desiredCode?.includes("intel")) {
+      const intelOption = options.find((option) => option.code.includes("intel"));
+      if (intelOption) {
+        return intelOption.code;
+      }
+    }
+
+    if (desiredCode?.startsWith("apple")) {
+      const appleOption = options.find((option) => option.code.startsWith("apple"));
+      if (appleOption) {
+        return appleOption.code;
+      }
+    }
+
+    const intelOption = options.find((option) => option.code.includes("intel"));
+    return intelOption?.code ?? options[0]!.code;
+  }
+
+  const desiredNumeric = desiredCode ? parseNumericOptionCode(desiredCode) : null;
+  if (desiredNumeric !== null) {
+    const numericOptions = options
+      .map((option) => ({ option, numericCode: parseNumericOptionCode(option.code) }))
+      .filter((item): item is { option: { code: string }; numericCode: number } => item.numericCode !== null)
+      .sort((left, right) => {
+        const leftDistance = Math.abs(left.numericCode - desiredNumeric);
+        const rightDistance = Math.abs(right.numericCode - desiredNumeric);
+        if (leftDistance !== rightDistance) {
+          return leftDistance - rightDistance;
+        }
+        return left.numericCode - right.numericCode;
+      });
+
+    if (numericOptions.length > 0) {
+      return numericOptions[0]!.option.code;
+    }
+  }
+
+  return options[0]!.code;
+}
+
+async function findMacFallbackQuote(
+  snapshot: TradeInSnapshotGraph,
+  input: {
+    modelCode: string;
+    answers: Record<string, string>;
+  },
+) {
+  const model = getTradeInModel(snapshot, "mac", input.modelCode);
+  const modelParams = model?.metadata.params;
+  const yearOptions = modelParams && typeof modelParams === "object" && !Array.isArray(modelParams)
+    ? extractGroupOptions((modelParams as Record<string, unknown>).year)
+    : [];
+
+  if (yearOptions.length === 0) {
+    return null;
+  }
+
+  const selectedYear = input.answers.year;
+  const selectedYearNumber = selectedYear ? parseNumericOptionCode(selectedYear) : null;
+  const orderedYears = [...new Set(yearOptions.map((option) => option.code))].sort((left, right) => {
+    if (left === selectedYear) {
+      return -1;
+    }
+    if (right === selectedYear) {
+      return 1;
+    }
+
+    const leftNumber = parseNumericOptionCode(left);
+    const rightNumber = parseNumericOptionCode(right);
+    if (selectedYearNumber !== null && leftNumber !== null && rightNumber !== null) {
+      const leftDistance = Math.abs(leftNumber - selectedYearNumber);
+      const rightDistance = Math.abs(rightNumber - selectedYearNumber);
+      if (leftDistance !== rightDistance) {
+        return leftDistance - rightDistance;
+      }
+    }
+
+    return left.localeCompare(right, "ru");
+  });
+
+  const seenPayloads = new Set<string>();
+
+  for (const year of orderedYears) {
+    try {
+      const yearScopedParams = await fetchTradeInCategoryParams("mac", {
+        models_macbooks: input.modelCode,
+        year,
+      });
+      const scopedModel = yearScopedParams?.[input.modelCode];
+      const scopedParams = scopedModel && typeof scopedModel === "object" && !Array.isArray(scopedModel)
+        ? ((scopedModel as Record<string, unknown>).params as Record<string, unknown> | undefined) ?? {}
+        : {};
+
+      const fallbackPayload: Record<string, string | number | boolean | null | undefined> = {
+        models_macbooks: input.modelCode,
+        year,
+        damaged: input.answers.damaged,
+      };
+
+      for (const [groupCode, groupPayload] of Object.entries(scopedParams)) {
+        const normalizedGroupCode = String((groupPayload as Record<string, unknown>).group_abbr ?? groupCode);
+        if (normalizedGroupCode === "year") {
+          continue;
+        }
+
+        const options = extractGroupOptions(groupPayload);
+        const nextCode = pickClosestOptionCode(normalizedGroupCode, input.answers[normalizedGroupCode], options);
+        if (!nextCode) {
+          continue;
+        }
+
+        fallbackPayload[normalizedGroupCode] = normalizedGroupCode === "is_retina"
+          ? normalizeBoolAnswer(nextCode)
+          : nextCode;
+      }
+
+      const payloadKey = JSON.stringify(fallbackPayload);
+      if (seenPayloads.has(payloadKey)) {
+        continue;
+      }
+      seenPayloads.add(payloadKey);
+
+      const candidate = await fetchTradeInBuyoutPrice("mac", fallbackPayload);
+      const amount = extractTradeInQuoteAmount(candidate, "mac");
+      if (!amount || !Number.isFinite(amount)) {
+        continue;
+      }
+
+      return {
+        amount,
+        bonus: Number(candidate.bonus_for_use ?? 0),
+        screenFine: Number(candidate.restored_display_iphone_fine ?? 0),
+        fallbackYear: year,
+      };
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
 function getTradeInCategory(snapshot: TradeInSnapshotGraph, categoryCode: string) {
   return snapshot.categories.find((item) => item.categoryCode === categoryCode) ?? null;
 }
@@ -614,16 +788,12 @@ export function buildTradeInPricingPayload(
   }
 
   if (input.categoryCode === "samsung") {
-    const payload: Record<string, string | undefined> = {
+    return {
       vendor: "samsung",
       models_android: input.modelCode,
       memory: answers.memory,
       exterier_condition_android: answers.exterier_condition_android,
     };
-    if (typeof modelMetadata.modelSeries === "string") {
-      payload.model_series = modelMetadata.modelSeries;
-    }
-    return payload;
   }
 
   if (input.categoryCode === "ipad") {
@@ -677,8 +847,16 @@ export async function quoteTradeInSelection(
   },
 ): Promise<TradeInPriceQuote> {
   const payload = buildTradeInPricingPayload(snapshot, input);
-  const candidates = [await fetchTradeInBuyoutPrice(input.categoryCode, payload)];
-  const normalizedCandidates = candidates
+  let initialCandidate: Record<string, unknown> | null = null;
+  try {
+    initialCandidate = await fetchTradeInBuyoutPrice(input.categoryCode, payload);
+  } catch (error) {
+    if (input.categoryCode !== "mac") {
+      throw error;
+    }
+  }
+
+  let normalizedCandidates = (initialCandidate ? [initialCandidate] : [])
     .map((candidate) => {
       const amount = extractTradeInQuoteAmount(candidate, input.categoryCode);
       if (!amount || !Number.isFinite(amount)) {
@@ -690,13 +868,30 @@ export async function quoteTradeInSelection(
     })
     .filter((item): item is { amount: number; bonus: number; screenFine: number } => Boolean(item));
 
+  let fallbackYear: string | null = null;
+  if (normalizedCandidates.length === 0 && input.categoryCode === "mac") {
+    const fallbackCandidate = await findMacFallbackQuote(snapshot, {
+      modelCode: input.modelCode,
+      answers: input.answers,
+    });
+
+    if (fallbackCandidate) {
+      normalizedCandidates = [{
+        amount: fallbackCandidate.amount,
+        bonus: fallbackCandidate.bonus,
+        screenFine: fallbackCandidate.screenFine,
+      }];
+      fallbackYear = fallbackCandidate.fallbackYear;
+    }
+  }
+
   if (normalizedCandidates.length === 0) {
     throw new Error("DamProdam pricing returned no candidates.");
   }
 
   const minAmount = Math.min(...normalizedCandidates.map((item) => item.amount));
   const maxAmount = Math.max(...normalizedCandidates.map((item) => item.amount));
-  const trace = [{ label: "Оценка DamProdam", amount: minAmount }];
+  const trace = [{ label: fallbackYear ? `Оценка DamProdam по ближайшей конфигурации ${fallbackYear}` : "Оценка DamProdam", amount: minAmount }];
 
   if (minAmount !== maxAmount) {
     trace.push({ label: `Диапазон сценариев ${minAmount}-${maxAmount} ₽`, amount: maxAmount - minAmount });

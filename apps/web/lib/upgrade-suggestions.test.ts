@@ -123,6 +123,39 @@ describe("upgrade suggestions", () => {
     expect(suggestions.some((item) => item.name.includes("iPhone 14 Pro Max 256Gb | Gold"))).toBe(true);
   });
 
+  it("preserves fallback image urls for upgrade cards", () => {
+    const suggestions = buildUpgradeSuggestions(
+      {
+        categoryCode: "iphone",
+        brand: "Apple",
+        model: "16",
+        storage: "256 ГБ",
+        estimatedTradeInValue: 60_000,
+      },
+      [
+        makeProduct({
+          slug: "iphone-17-pro-max-deep-blue",
+          categorySlug: "novye-ustroystva-apple-iphone",
+          name: "iPhone 17 Pro Max, Deep Blue",
+          brand: "Apple",
+          price: 108_700,
+          imageUrl: "/uploads/products/iphone-17-pro-max-deep-blue-stale.webp",
+          imageUrls: [
+            "/uploads/products/iphone-17-pro-max-deep-blue-stale.webp",
+            "/uploads/products/iphone-17-pro-max-deep-blue-ba46cd2a-fd14-4dbd-b06e-160caaeac9ca.webp",
+          ],
+        }),
+      ],
+      categoryTree,
+    );
+
+    expect(suggestions).toHaveLength(1);
+    expect(suggestions[0]?.imageUrls).toEqual([
+      "/uploads/products/iphone-17-pro-max-deep-blue-stale.webp",
+      "/uploads/products/iphone-17-pro-max-deep-blue-ba46cd2a-fd14-4dbd-b06e-160caaeac9ca.webp",
+    ]);
+  });
+
   it("used inventory candidates also exclude same or older models", () => {
     const products: CatalogProduct[] = [
       makeProduct({ slug: "iphone-13-used", categorySlug: "trade-in-ustroystva-trade-in-smartfony", name: "iPhone 13 128Gb | Midnight", brand: "Trade-in смартфоны", price: 31_700 }),

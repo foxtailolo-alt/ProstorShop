@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { chromium, type Browser, type Page } from "playwright";
+import type { Browser, Page } from "playwright";
 import { buildTargetPriceFromCompetitor } from "./competitor-pricing";
 import { normalizeProductOptionsOrder } from "./product-options-order";
 
@@ -12,6 +12,8 @@ const execFileAsync = promisify(execFile);
 if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
   process.env.PLAYWRIGHT_BROWSERS_PATH = "0";
 }
+
+const { chromium } = require("playwright") as typeof import("playwright");
 
 export type ProductOptionsData = {
   groups: Array<{ name: string; values: string[] }>;

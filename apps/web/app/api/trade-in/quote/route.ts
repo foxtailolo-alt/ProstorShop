@@ -33,7 +33,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ quote });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Trade-in quote failed.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Trade-in quote failed", {
+      categoryCode,
+      modelCode,
+      answers,
+      error,
+    });
+    return NextResponse.json({ quote: null });
   }
 }

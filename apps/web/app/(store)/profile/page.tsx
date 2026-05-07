@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ConfirmButton } from "../../../components/admin/confirm-button";
 import { StoreNav } from "../../../components/layout/store-nav";
+import { SafeProductImage } from "../../../components/product/safe-product-image";
 import { TelegramLoginWidget } from "../../../components/auth/telegram-login-widget";
 import { PhoneLoginCard } from "../../../components/auth/phone-login-card";
 import { formatOrderNumber } from "../../../lib/order-number";
@@ -357,13 +358,11 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
                                       className="profile-upgrade-card"
                                     >
                                       <div className="profile-upgrade-card-top">
-                                        <div className="profile-upgrade-card-media">
-                                          {product.imageUrl ? (
-                                            <img src={product.imageUrl} alt={product.name} loading="lazy" />
-                                          ) : (
-                                            <div className="product-media-fallback" />
-                                          )}
-                                        </div>
+                                        <SafeProductImage
+                                          className="profile-upgrade-card-media"
+                                          images={product.imageUrls.length > 0 ? product.imageUrls : product.imageUrl ? [product.imageUrl] : []}
+                                          alt={product.name}
+                                        />
                                         <span className="pill pill-muted">{product.inventoryLabel}</span>
                                       </div>
                                       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>

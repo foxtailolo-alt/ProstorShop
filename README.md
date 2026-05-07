@@ -144,6 +144,10 @@ infra/
 - **Storefront compliance and branding** — live store footer now includes legal pages, compact contact/requisites block, privacy/consent links, Yandex reviews block, and the real uploaded logo asset in header/footer.
 - **Promo and trade-in expansion** — admin promo code management, scoped promo logic, trade-in promo redemption, accessory attachment, and trade-in bonus models are in the current main branch and deployed.
 - **Competitor pricing runtime hardening** — Playwright is now a runtime dependency for `@prostor/web`; competitor sync can install Chromium on demand and no longer depends on one specific admin machine cache.
+- **Storefront cart UX refresh** — product pages now add to cart without reload, animate into the cart, update desktop/mobile cart counters live, and render recommended product cards with direct add-to-cart actions.
+- **Accessory bundle pricing** — accessory recommendations and cart lines now show `-20%` bundle pricing with pretty rounding to `...100 ₽`, but the discount activates only when at least one non-accessory device is present in the cart.
+- **Admin CRM and ergonomics** — `/admin/clients` was added, `/admin/orders` was redesigned into a CRM-style queue, audit/service/catalog overview blocks are collapsible, and audit labels are human-readable.
+- **Storefront/mobile polish** — long product descriptions are collapsible, the lightbox/gallery was rebuilt, mobile navigation now uses a bottom dock, and trade-in/service forms prefill name and phone from the current session.
 - **Telegram post templates** — publishing and preview use a shared plain-text template builder with optional store footer injection. Premium/custom emoji HTML mode was removed.
 - `Category.imageUrl` field for category grid display.
 - `seoKeywords` field on Category model, rendered as `<meta name="keywords">` on category pages.
@@ -159,21 +163,23 @@ infra/
 - Production media storage is externalized via `UPLOADS_DIR=/home/deploy/prostor-uploads`, and release archives no longer overwrite the uploads directory.
 - Verified 2026-04-24: if files were changed only in `apps/web/public/uploads`, a normal `deploy:pack` release is not enough; those media files must be synced to `/home/deploy/prostor-uploads` separately.
 - Verified 2026-05-06: current production is updated through commit `9afd790` (`Preserve legacy user avatar table`), `prostor-web` and `prostor-bot` are active, and public `/catalog`, `/privacy-policy`, and real `/uploads/categories/...` URLs return `200`.
-- Vitest coverage expanded for banners, cart variants, AI specs route, cart-selection helpers, and catalog tree helpers (60 tests across 9 files).
+- Verified 2026-05-07: production is now updated through commit `8cb0c27` (`Improve storefront cart UX and admin tools`); `typecheck`, full `vitest`, local `@prostor/web build`, server `build:prod`, and public `curl -I` checks for `/`, `/profile`, and `/login` all passed.
+- Vitest coverage expanded to 123 tests across 19 files, including cart pricing, cart actions, AI specs route, permissions, attribution, catalog tree, competitor sync, and auth session flows.
 
 ### Remaining Work
 
 - Run a focused production smoke check for admin flows: category reorder, `/admin/products` live filters, competitor pricing review flow, and media editing after save.
+- Run a focused production smoke check for the newly shipped flows: `/admin/clients`, `/admin/orders`, no-reload add-to-cart, recommended product add buttons, accessory bundle discount, and trade-in/service autofill.
 - **Populate homepage sections** — use admin UI at `/admin/marketing/homepage` to create bestsellers, category grid, and coverflow sections with real product data.
 - Run a full post-deploy smoke check for the live stack: `/login`, `/profile`, cart promo flow, referral promo flow, homepage section management, Telegram post publishing, and Mini App launch from bot.
-- Fix product options cart/order flow — extend CartItem type & OrderItem model to include `variantLabel`.
 - Apply and document the Prisma migration path for production instead of relying only on `db push` as the schema continues to grow.
 - Finish production setup for Telegram posting and verify the target channel/group permissions with the current bot token.
 - Test phone auth flow end-to-end on production (register, login, profile display, logout).
 - Consider bcrypt or argon2 for password hashing (currently SHA-256) before launching phone auth publicly.
 - Add AI SEO generation for products (currently only categories have it).
+- Investigate the remaining Telegram Mini App hydration/client warnings in dev; they did not block this release, but they still appear during local browser validation.
 
-## Next Session Handoff (Updated 2026-05-06)
+## Next Session Handoff (Updated 2026-05-07)
 
 ### Verified Context
 
@@ -198,6 +204,7 @@ infra/
 - Uploaded media must use `UPLOADS_DIR` on production; current VPS value is `/home/deploy/prostor-uploads` and nginx serves `/uploads/*` from the same location.
 - Production code and schema were redeployed successfully on 2026-04-24; the VPS now matches the local workspace commit content for `package.json` and `packages/db/prisma/schema.prisma`.
 - Production was redeployed again on 2026-05-06 through `origin/main` commit `9afd790`; legal pages/footer/logo changes, promo admin, accessory bonus logic, and competitor sync runtime fixes are live.
+- Production was redeployed again on 2026-05-07 through `origin/main` commit `8cb0c27`; the release includes the new cart UX, recommended-item add buttons, accessory bundle pricing, admin clients CRM view, order queue redesign, trade-in/service autofill, and updated mobile/storefront polish.
 - A server backup exists from before the deploy in `/home/deploy/backups` as `ProstorShop_20260424_171441.tgz` and `prostor-uploads_20260424_171441.tgz`.
 - Local product images for AirPods Max 2 were missing on the VPS after deploy because `deploy:pack` excludes uploads by design; they were fixed by syncing local `apps/web/public/uploads` into `/home/deploy/prostor-uploads` separately.
 - When local changes touch uploaded files, the production deploy checklist must include an extra media sync step after code deploy.
@@ -210,19 +217,31 @@ infra/
 - Storefront coverflow uses a seamless loop with duplicated slides to avoid visible edge-jumps; non-active cards remain opaque and cards use solid white backgrounds.
 - Bestsellers cards now also use solid white backgrounds and a more compact layout without stock text.
 - Competitor pricing sync now auto-installs Playwright Chromium on first server run if it is missing and uses a project-local browser cache instead of a user-specific home cache.
+- Cart UX now uses `apps/web/components/cart/add-to-cart-button.tsx` for no-reload add-to-cart with fly-to-cart animation and custom events (`prostor:cart-updated`, `prostor:cart-bump`) consumed by `CartStatusLink` and `StoreMobileDock`.
+- Shared bundle-pricing rules live in `apps/web/lib/cart-pricing.ts`; accessory discounts must go through `buildCartEntriesWithPricing()` so storefront cart and order submission stay consistent.
+- Accessory detection must not rely on `categorySlug === "accessories"` only. Live catalog items can use nested slugs like `novye-ustroystva-apple-aksessuary`, so `isAccessoryProduct()` is the safe abstraction.
+- Mixed DB + seed catalog mode is still relevant: cart/order flows must resolve products by slug fallback (`findCatalogProductBySlug`) rather than assuming every storefront product exists in Prisma.
+- `findCatalogProductBySlug()` now falls back to seed catalog data, and `listCatalogProducts()` normalizes seed items to `StorefrontProduct` with `hasOptions` so storefront listing code can stay type-safe.
+- Trade-in and service pages now derive initial customer name/phone from `getSession()` and pass them into the client calculators/wizard as defaults.
+- `/admin/clients` now exists as a separate CRM-like operator surface with overlay panels for profile/orders/points, manual point adjustments, and audit logging under `customer.points.adjusted`.
+- `/admin/orders` is now a CRM-style queue with status filters, user deep links, richer line items, and marketing/source context.
+- Product descriptions are collapsible through `apps/web/components/product/product-description.tsx`, and the product gallery/lightbox was rebuilt in `apps/web/components/product/product-gallery.tsx`.
+- `GlassSelect` is now reused across trade-in, service, and admin product flows; product modal uploads also support clipboard paste and direct buffer reads in supporting browsers.
+- AI specs endpoint no longer sends `text.format` to Responses API; the current passing path uses `/v1/responses` with `web_search_preview` only.
 - Production build nuance verified 2026-05-06: before `corepack pnpm --filter @prostor/web build:prod`, export the root env in shell with `set -a && . ./.env && set +a`, otherwise `scripts/assert-public-env.mjs` will not see `NEXT_PUBLIC_SITE_URL`.
 - Prisma deploy nuance verified 2026-05-06: the release must also provide `packages/db/.env` or equivalent `DATABASE_URL`/`DIRECT_URL` values for `prisma db push`; relying only on root `.env` was not enough in the isolated release dir.
 - Prisma schema nuance verified 2026-05-06: keep the `LegacyUserAvatar` mapping in `packages/db/prisma/schema.prisma` until the old `UserAvatar` table is migrated or intentionally removed, otherwise production `db push` stops on destructive data-loss warning.
+- Local validation status at session close: `corepack pnpm typecheck`, `corepack pnpm test`, and `corepack pnpm --filter @prostor/web build` all pass on commit `8cb0c27`.
+- Remaining non-blocking issue at session close: Telegram Mini App / hydration warnings still appear in local browser validation, but they did not break the deployed release or public health checks.
 
 ### Next Recommended Steps
 
-1. **Deploy to VPS**: `corepack pnpm deploy:pack` → upload archive to `root@88.218.64.61` → extract to a release dir → copy `/root/.env` and `packages/db/.env` into the release → `set -a && . ./.env && set +a` → `corepack pnpm install --frozen-lockfile` → `db:generate` → `db:push` → `corepack pnpm --filter @prostor/web build:prod` → restart `prostor-web` and `prostor-bot`.
-2. **If media changed locally**: sync `apps/web/public/uploads` to `/home/deploy/prostor-uploads` separately; the release tarball intentionally excludes uploads.
-3. **If category images changed locally**: explicitly sync `apps/web/public/uploads/categories/*` to `/home/deploy/prostor-uploads/categories/`; this was the exact missing step for Apple, Dyson, Google, Marshall, and OnePlus category cards on 2026-05-06.
-4. Populate homepage sections via `/admin/marketing/homepage` if storefront merchandising is still incomplete.
-5. Run a focused production smoke test for `/admin/categories`, `/admin/promo-codes`, competitor pricing sync, `/catalog`, `/privacy-policy`, login, profile, cart, and trade-in promo flow.
-6. Convert schema changes into proper Prisma migrations before next structural update.
-7. Verify Telegram posting end-to-end with the current bot token and target channel permissions.
+1. Run a focused live smoke test for the newly deployed flows: `/admin/clients`, `/admin/orders`, product-page no-reload add-to-cart, recommendation-card add-to-cart, cart bundle discount, trade-in autofill, and service autofill.
+2. Investigate and clean up the remaining Telegram Mini App / hydration warnings seen in local browser validation, especially around `telegram-mini-app-bootstrap.tsx` and client/server markup differences.
+3. Populate homepage sections via `/admin/marketing/homepage` if storefront merchandising is still incomplete.
+4. If media changed locally in a future session, sync `apps/web/public/uploads` or `apps/web/public/uploads/categories` separately to `/home/deploy/prostor-uploads/...`; `deploy:pack` still excludes uploads by design.
+5. Convert schema changes into proper Prisma migrations before the next structural DB update.
+6. Verify Telegram posting end-to-end with the current bot token and target channel permissions.
 
 ## Build Order
 

@@ -87,7 +87,6 @@ export function TradeInWizard({
   const [answers, setAnswers] = useState<Record<string, string>>(initialProfileDevice?.answersJson ?? {});
   const [waitlistColor, setWaitlistColor] = useState("Не важно");
   const [quote, setQuote] = useState<TradeInPriceQuote | null>(null);
-  const [quoteError, setQuoteError] = useState<string | null>(null);
   const [quotePending, setQuotePending] = useState(false);
 
   const models = useMemo(() => getTradeInModels(snapshot, categoryCode), [snapshot, categoryCode]);
@@ -169,20 +168,17 @@ export function TradeInWizard({
   useEffect(() => {
     if (mode === "waitlist") {
       setQuote(null);
-      setQuoteError(null);
       setQuotePending(false);
       return;
     }
 
     if (!categoryCode || !modelCode || !flowState.isComplete) {
       setQuote(null);
-      setQuoteError(null);
       return;
     }
 
     const controller = new AbortController();
     setQuotePending(true);
-    setQuoteError(null);
 
     fetch("/api/trade-in/quote", {
       method: "POST",
@@ -202,7 +198,7 @@ export function TradeInWizard({
         if (!response.ok) {
           throw new Error(typeof payload?.error === "string" ? payload.error : "Не удалось рассчитать стоимость trade-in.");
         }
-        return payload.quote as TradeInPriceQuote;
+        return (payload.quote ?? null) as TradeInPriceQuote | null;
       })
       .then((nextQuote) => {
         setQuote(nextQuote);
@@ -211,8 +207,8 @@ export function TradeInWizard({
         if (controller.signal.aborted) {
           return;
         }
+        console.error("Trade-in quote request failed", error);
         setQuote(null);
-        setQuoteError(error instanceof Error ? error.message : "Не удалось рассчитать стоимость trade-in.");
       })
       .finally(() => {
         if (!controller.signal.aborted) {
@@ -227,7 +223,6 @@ export function TradeInWizard({
     <section className="card glass calculator-card">
       <div className="trade-in-wizard-head">
         <div>
-          <div className="section-label">Оценка по ProstorTradeInBot</div>
           <h2 className="trade-in-wizard-title">{title}</h2>
           <p className="trade-in-wizard-copy">{intro}</p>
         </div>
@@ -368,8 +363,7 @@ export function TradeInWizard({
                 ))}
               </div>
             ) : null}
-            {quoteError ? <p>{quoteError}</p> : null}
-            {!quoteError ? <p>Финальная стоимость зависит от состояния, комплектации и результатов диагностики устройства.</p> : null}
+            <p>Финальная стоимость зависит от состояния, комплектации и результатов диагностики устройства.</p>
           </>
         )}
       </div>

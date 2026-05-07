@@ -9,6 +9,7 @@
 :root {
   --bg: #f0f4f8;
   --bg-warm: #faf7f5;
+  --telegram-mini-app-top-offset: 0px;
   --surface: rgba(255, 255, 255, 0.55);
   --surface-strong: rgba(255, 255, 255, 0.78);
   --surface-hover: rgba(255, 255, 255, 0.88);
@@ -95,6 +96,15 @@ img {
 
 html[data-telegram-mini-app="true"] .store-footer {
   display: none;
+}
+
+html[data-telegram-mini-app="true"] {
+  --telegram-mini-app-top-offset: calc(env(safe-area-inset-top) + 52px);
+}
+
+html[data-telegram-mini-app="true"] .nav {
+  margin-top: var(--telegram-mini-app-top-offset);
+  top: calc(12px + var(--telegram-mini-app-top-offset));
 }
 
 .store-footer {

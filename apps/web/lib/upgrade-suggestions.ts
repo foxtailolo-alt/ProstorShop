@@ -17,6 +17,7 @@ export type UpgradeSuggestion = {
   name: string;
   brand: string;
   imageUrl?: string;
+  imageUrls: string[];
   price: number;
   compareAtPrice?: number;
   inStock: boolean;
@@ -218,6 +219,7 @@ export function buildUpgradeSuggestions(
     .filter((product) => getProductFamily(product) === family)
     .filter((product) => getModelRank(family, product.name) > currentRank)
     .map((product) => {
+      const productImageUrls = product.imageUrls ?? [];
       const inventory = detectInventoryKind(product, categoryTree);
       const rank = getModelRank(family, product.name);
       const productStorage = extractStorageValue(`${product.name} ${product.attributes?.storage ?? ""}`);
@@ -232,6 +234,11 @@ export function buildUpgradeSuggestions(
         name: product.name,
         brand: product.brand,
         imageUrl: product.imageUrl,
+        imageUrls: productImageUrls.length > 0
+          ? productImageUrls
+          : product.imageUrl
+            ? [product.imageUrl]
+            : [],
         price: product.price,
         compareAtPrice: product.compareAtPrice,
         inStock: product.inStock,

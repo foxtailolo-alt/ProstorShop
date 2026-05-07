@@ -6,6 +6,8 @@ import { getCartItems } from "../../lib/cart";
 import { getRuntimeFeatureFlags } from "../../lib/data/catalog";
 import { getNavigation } from "../../lib/site";
 import { BrandLogo } from "./brand-logo";
+import { CartStatusLink } from "./cart-status-link";
+import { StoreMobileDock } from "./store-mobile-dock";
 
 export async function StoreNav() {
   const [featureFlags, cartItems, session] = await Promise.all([
@@ -16,34 +18,45 @@ export async function StoreNav() {
 
   const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const canOpenAdmin = session ? isAdminSession(session) : false;
-  const navigation = getNavigation(featureFlags).map((item) =>
-    item.href === "/cart" && cartCount > 0
-      ? { ...item, label: `Корзина (${cartCount})` }
-      : item,
-  );
+  const navigation = getNavigation(featureFlags);
+  const mobileUtilityLinks = navigation.filter((item) => item.href === "/trade-in" || item.href === "/service");
 
   return (
-    <nav className="nav glass">
-      <Link href="/" className="nav-logo" aria-label={siteConfig.legalName}>
-        <BrandLogo compact />
-      </Link>
-      <div className="nav-side">
-        <div className="nav-links">
-          {navigation.map((item) => (
-            <Link key={item.href} href={item.href as "/catalog"}>
-              {item.label}
+    <>
+      <nav className="nav glass">
+        <Link href="/" className="nav-logo" aria-label={siteConfig.legalName}>
+          <BrandLogo compact />
+        </Link>
+        <div className="nav-side">
+          <div className="nav-links">
+            {navigation.map((item) => item.href === "/cart" ? (
+              <CartStatusLink key={item.href} initialCartCount={cartCount} />
+            ) : (
+              <Link key={item.href} href={item.href as "/catalog"}>
+                {item.label}
+              </Link>
+            ))}
+            <Link href={"/profile" as Route}>
+              {session ? "Профиль" : "Войти"}
             </Link>
-          ))}
-          <Link href={"/profile" as Route}>
-            {session ? "Профиль" : "Войти"}
-          </Link>
+          </div>
+          {canOpenAdmin ? (
+            <Link href="/admin" className="button button-secondary button-sm nav-admin-link">
+              Админка
+            </Link>
+          ) : null}
         </div>
-        {canOpenAdmin ? (
-          <Link href="/admin" className="button button-secondary button-sm nav-admin-link">
-            Админка
-          </Link>
+        {mobileUtilityLinks.length > 0 ? (
+          <div className="nav-mobile-links" aria-label="Быстрые разделы">
+            {mobileUtilityLinks.map((item) => (
+              <Link key={item.href} href={item.href as "/trade-in"}>
+                {item.label}
+              </Link>
+            ))}
+          </div>
         ) : null}
-      </div>
-    </nav>
+      </nav>
+      <StoreMobileDock cartCount={cartCount} isAuthenticated={Boolean(session)} />
+    </>
   );
 }

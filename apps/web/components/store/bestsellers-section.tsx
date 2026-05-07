@@ -40,12 +40,20 @@ export function BestsellersSection({ title, items, addToCartAction }: Props) {
                   <span className="product-card-old-price">{highlighted.product.compareAtPrice.toLocaleString("ru-RU")} ₽</span>
                 ) : null}
               </div>
-              <form action={addToCartAction} className="product-card-actions">
-                <input type="hidden" name="productSlug" value={highlighted.product.slug} />
-                <input type="hidden" name="quantity" value="1" />
-                <input type="hidden" name="redirectTo" value="/" />
-                <button className="button button-primary button-sm" type="submit">В корзину</button>
-              </form>
+              {highlighted.product.hasOptions ? (
+                <div className="product-card-actions">
+                  <Link className="button button-primary button-sm" href={`/catalog/${highlighted.product.categorySlug}/${highlighted.product.slug}?configure=1`}>
+                    В корзину
+                  </Link>
+                </div>
+              ) : (
+                <form action={addToCartAction} className="product-card-actions">
+                  <input type="hidden" name="productSlug" value={highlighted.product.slug} />
+                  <input type="hidden" name="quantity" value="1" />
+                  <input type="hidden" name="redirectTo" value="/" />
+                  <button className="button button-primary button-sm" type="submit">В корзину</button>
+                </form>
+              )}
             </div>
           </article>
         )}
@@ -74,12 +82,20 @@ export function BestsellersSection({ title, items, addToCartAction }: Props) {
                       <span className="product-card-old-price">{p.compareAtPrice.toLocaleString("ru-RU")} ₽</span>
                     ) : null}
                   </div>
-                  <form action={addToCartAction} className="product-card-actions">
-                    <input type="hidden" name="productSlug" value={p.slug} />
-                    <input type="hidden" name="quantity" value="1" />
-                    <input type="hidden" name="redirectTo" value="/" />
-                    <button className="button button-primary button-sm" type="submit">В корзину</button>
-                  </form>
+                  {p.hasOptions ? (
+                    <div className="product-card-actions">
+                      <Link className="button button-primary button-sm" href={`/catalog/${p.categorySlug}/${p.slug}?configure=1`}>
+                        В корзину
+                      </Link>
+                    </div>
+                  ) : (
+                    <form action={addToCartAction} className="product-card-actions">
+                      <input type="hidden" name="productSlug" value={p.slug} />
+                      <input type="hidden" name="quantity" value="1" />
+                      <input type="hidden" name="redirectTo" value="/" />
+                      <button className="button button-primary button-sm" type="submit">В корзину</button>
+                    </form>
+                  )}
                 </div>
               </article>
             );

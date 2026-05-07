@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { GlassSelect } from "../../../components/store/glass-select";
 import type { ServiceCatalogEntry } from "../../../lib/service-catalog";
 import { submitServiceRequestAction } from "./actions";
 
 type ServiceCalculatorProps = {
   entries: ServiceCatalogEntry[];
+  initialCustomerName?: string;
+  initialPhone?: string;
 };
 
 type SelectOption = {
@@ -85,7 +88,7 @@ function getVariants(entries: ServiceCatalogEntry[], brand: string, modelSlug: s
     });
 }
 
-export function ServiceCalculator({ entries }: ServiceCalculatorProps) {
+export function ServiceCalculator({ entries, initialCustomerName = "", initialPhone = "" }: ServiceCalculatorProps) {
   const brands = useMemo(() => getBrands(entries), [entries]);
   const [brand, setBrand] = useState(brands[0] ?? "");
   const [modelSlug, setModelSlug] = useState(getModels(entries, brands[0] ?? "")[0]?.slug ?? "");
@@ -152,10 +155,9 @@ export function ServiceCalculator({ entries }: ServiceCalculatorProps) {
       <div className="form-grid">
         <label className="field">
           <span>Бренд</span>
-          <select
+          <GlassSelect
             value={brand}
-            onChange={(event) => {
-              const nextBrand = event.target.value;
+            onChange={(nextBrand) => {
               const nextModel = getModels(entries, nextBrand)[0]?.slug ?? "";
               const nextService = getServices(entries, nextBrand, nextModel)[0]?.slug ?? "";
               setBrand(nextBrand);
@@ -163,62 +165,46 @@ export function ServiceCalculator({ entries }: ServiceCalculatorProps) {
               setServiceSlug(nextService);
               setVariantId(getVariants(entries, nextBrand, nextModel, nextService)[0]?.variantId ?? "");
             }}
-          >
-            {brands.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
+            options={brands.map((item) => ({ value: item, label: item }))}
+          />
         </label>
 
         <label className="field">
           <span>Модель</span>
-          <select
+          <GlassSelect
             value={modelSlug}
-            onChange={(event) => {
-              const nextModelSlug = event.target.value;
+            onChange={(nextModelSlug) => {
               const nextService = getServices(entries, brand, nextModelSlug)[0]?.slug ?? "";
               setModelSlug(nextModelSlug);
               setServiceSlug(nextService);
               setVariantId(getVariants(entries, brand, nextModelSlug, nextService)[0]?.variantId ?? "");
             }}
-          >
-            {models.map((item) => (
-              <option key={item.slug} value={item.slug}>
-                {item.name}
-              </option>
-            ))}
-          </select>
+            options={models.map((item) => ({ value: item.slug, label: item.name }))}
+          />
         </label>
 
         <label className="field field-wide">
           <span>Услуга</span>
-          <select
+          <GlassSelect
             value={serviceSlug}
-            onChange={(event) => {
-              const nextServiceSlug = event.target.value;
+            onChange={(nextServiceSlug) => {
               setServiceSlug(nextServiceSlug);
               setVariantId(getVariants(entries, brand, modelSlug, nextServiceSlug)[0]?.variantId ?? "");
             }}
-          >
-            {services.map((item) => (
-              <option key={item.slug} value={item.slug}>
-                {item.name}
-              </option>
-            ))}
-          </select>
+            options={services.map((item) => ({ value: item.slug, label: item.name }))}
+          />
         </label>
 
         <label className="field field-wide">
           <span>Вариант запчасти</span>
-          <select value={variantId} onChange={(event) => setVariantId(event.target.value)}>
-            {variants.map((item) => (
-              <option key={item.variantId} value={item.variantId}>
-                {item.variantName}
-              </option>
-            ))}
-          </select>
+          <GlassSelect
+            value={variantId}
+            onChange={setVariantId}
+            options={variants.map((item) => ({
+              value: item.variantId,
+              label: item.variantName,
+            }))}
+          />
         </label>
       </div>
 
@@ -247,11 +233,11 @@ export function ServiceCalculator({ entries }: ServiceCalculatorProps) {
         <input type="hidden" name="quote" value={String(quote ?? 0)} />
         <label className="field">
           <span>Имя</span>
-          <input name="customerName" type="text" placeholder="Как к вам обращаться" required />
+          <input name="customerName" type="text" placeholder="Как к вам обращаться" defaultValue={initialCustomerName} required />
         </label>
         <label className="field">
           <span>Телефон</span>
-          <input name="phone" type="tel" placeholder="+7 900 000-00-00" required />
+          <input name="phone" type="tel" placeholder="+7 900 000-00-00" defaultValue={initialPhone} required />
         </label>
         <label className="field field-wide">
           <span>Комментарий</span>

@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { StoreNav } from "../../../components/layout/store-nav";
 import { getCartItems } from "../../../lib/cart";
 import { getSession } from "../../../lib/auth/session";
-import { getRuntimeFeatureFlags, listCatalogProducts } from "../../../lib/data/catalog";
+import { findCatalogProductBySlug, getRuntimeFeatureFlags } from "../../../lib/data/catalog";
+import { buildCartEntriesWithPricing } from "../../../lib/cart-pricing";
 import { formatOrderNumber } from "../../../lib/order-number";
 import { getAppliedPromoCode, getPromoCodeSummary } from "../../../lib/promo";
 import { applyPromoCodeAction, clearCartAction, clearPromoCodeAction, removeCartItemAction, submitOrderAction, updateCartItemAction } from "./actions";
@@ -32,27 +33,17 @@ export default async function CartPage({ searchParams }: CartPageProps) {
     getRuntimeFeatureFlags(),
     getSession(),
     getCartItems(),
-    listCatalogProducts(),
+    Promise.all([...new Set((await getCartItems()).map((item) => item.productSlug))].map((slug) => findCatalogProductBySlug(slug))),
     getAppliedPromoCode(),
   ]);
   const defaultName = [session?.user.firstName, session?.user.lastName].filter(Boolean).join(" ") || session?.user.username || "";
   const defaultPhone = session?.user.phone || "";
-  const cartProductMap = new Map(products.map((product) => [product.slug, product]));
-  const cartEntries = cartItems
-    .map((item) => {
-      const product = cartProductMap.get(item.productSlug);
-      return product
-        ? {
-            item,
-            product,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            subtotal: item.unitPrice * item.quantity,
-          }
-        : null;
-    })
-    .filter((entry): entry is { item: (typeof cartItems)[number]; product: NonNullable<(typeof products)[number]>; quantity: number; unitPrice: number; subtotal: number } => Boolean(entry));
+  const resolvedProducts = products.filter((product): product is NonNullable<(typeof products)[number]> => Boolean(product));
+  const cartProductMap = new Map(resolvedProducts.map((product) => [product.slug, product]));
+  const cartEntries = buildCartEntriesWithPricing({ cartItems, products: resolvedProducts });
   const total = cartEntries.reduce((sum, entry) => sum + entry.subtotal, 0);
+  const accessorySavings = cartEntries.reduce((sum, entry) => sum + ((entry.compareAtUnitPrice ?? entry.effectiveUnitPrice) - entry.effectiveUnitPrice) * entry.quantity, 0);
+  const hasAccessoryWithoutDeviceDiscount = cartEntries.some((entry) => entry.isAccessory) && !cartEntries.some((entry) => !entry.isAccessory);
   const addedProduct = addedProductSlug ? cartProductMap.get(addedProductSlug) : null;
   const appliedPromoCode = appliedPromoCodeValue
     ? await getPromoCodeSummary(appliedPromoCodeValue, session?.user.id ?? null).catch(() => null)
@@ -102,7 +93,7 @@ export default async function CartPage({ searchParams }: CartPageProps) {
         <section className="store-section">
           <div className="cart-layout">
             <div className="cart-items">
-              {cartEntries.map(({ item, product, quantity, unitPrice, subtotal }) => (
+              {cartEntries.map(({ item, product, quantity, effectiveUnitPrice, subtotal, isAccessory, hasBundleDiscount, compareAtUnitPrice, bundleDiscountPercent }) => (
                 <div key={item.itemKey} className="cart-item glass">
                   <Link href={`/catalog/${product.categorySlug}/${product.slug}`} className="cart-item-media">
                     {product.imageUrl ? (
@@ -116,7 +107,20 @@ export default async function CartPage({ searchParams }: CartPageProps) {
                       {product.name}
                     </Link>
                     {item.variantLabel ? <span className="muted">{item.variantLabel}</span> : null}
-                    <span className="cart-item-price">{unitPrice.toLocaleString("ru-RU")} ₽</span>
+                    {hasBundleDiscount ? (
+                      <>
+                        <span className="cart-item-price cart-item-price-old">{compareAtUnitPrice?.toLocaleString("ru-RU")} ₽</span>
+                        <div className="cart-item-offer-line">
+                          <span className="cart-item-discount-pill">-{bundleDiscountPercent}% на аксессуар</span>
+                          <span className="cart-item-price-strong">{effectiveUnitPrice.toLocaleString("ru-RU")} ₽</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <span className="cart-item-price">{effectiveUnitPrice.toLocaleString("ru-RU")} ₽</span>
+                        {isAccessory ? <span className="cart-item-bundle-hint">Скидка 20% включится после добавления устройства</span> : null}
+                      </>
+                    )}
                   </div>
                   <div className="cart-item-controls">
                     <form action={updateCartItemAction} className="cart-qty-form">
@@ -144,6 +148,8 @@ export default async function CartPage({ searchParams }: CartPageProps) {
                   <strong>{total.toLocaleString("ru-RU")} ₽</strong>
                 </div>
               </div>
+              {accessorySavings > 0 ? <div className="cart-bundle-summary">Экономия на аксессуарах: {accessorySavings.toLocaleString("ru-RU")} ₽</div> : null}
+              {hasAccessoryWithoutDeviceDiscount ? <div className="cart-bundle-summary">Добавьте любое устройство, чтобы активировать скидку 20% на аксессуары.</div> : null}
             </div>
 
             <div className="cart-checkout glass">
@@ -190,6 +196,7 @@ export default async function CartPage({ searchParams }: CartPageProps) {
                   <span>Позиций: {cartEntries.length}</span>
                   <strong>{total.toLocaleString("ru-RU")} ₽</strong>
                 </div>
+                {accessorySavings > 0 ? <div className="muted">Скидка на аксессуары: −{accessorySavings.toLocaleString("ru-RU")} ₽</div> : null}
                 {appliedPromoCode?.rewardDescription ? (
                   <div className="muted">Бонус к заказу: {appliedPromoCode.rewardDescription}</div>
                 ) : null}

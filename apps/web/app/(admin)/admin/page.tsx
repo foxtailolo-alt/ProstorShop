@@ -9,31 +9,53 @@ import {
 } from "../../../lib/data/catalog";
 import { getAuditMetadataEntries } from "../../../lib/audit";
 import { getSession } from "../../../lib/auth/session";
+import {
+  formatAuditAction,
+  formatAuditEntityType,
+} from "../../../lib/audit";
+import { withTransientDatabaseFallback } from "../../../lib/prisma-transient";
 
 export default async function AdminPage() {
+  let databaseDegraded = false;
   const [session, catalogSummary, catalogCategories, catalogProducts, featureFlags, orders, tradeInRequests, serviceRequests, activityLogs] = await Promise.all([
     getSession(),
     getCatalogSummaryData(),
     listCatalogCategories(),
     listCatalogProducts(),
     getFeatureFlagEntries(),
-    prisma.order.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    }),
-    prisma.tradeInRequest.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    }),
-    prisma.serviceRequest.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    }),
-    prisma.activityLog.findMany({
-      orderBy: { createdAt: "desc" },
-      include: { user: true },
-      take: 8,
-    }),
+    withTransientDatabaseFallback(
+      () => prisma.order.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+      [],
+      { onFallback: () => { databaseDegraded = true; } },
+    ),
+    withTransientDatabaseFallback(
+      () => prisma.tradeInRequest.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+      [],
+      { onFallback: () => { databaseDegraded = true; } },
+    ),
+    withTransientDatabaseFallback(
+      () => prisma.serviceRequest.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+      [],
+      { onFallback: () => { databaseDegraded = true; } },
+    ),
+    withTransientDatabaseFallback(
+      () => prisma.activityLog.findMany({
+        orderBy: { createdAt: "desc" },
+        include: { user: true },
+        take: 8,
+      }),
+      [],
+      { onFallback: () => { databaseDegraded = true; } },
+    ),
   ]);
 
   const adminSession = session!;
@@ -52,6 +74,11 @@ export default async function AdminPage() {
           Здесь менеджер должен быстро видеть очередь обращений, каталог, недостающие данные и
           последние действия команды. Без презентационных блоков и лишних обещаний.
         </p>
+        {databaseDegraded ? (
+          <div className="pill pill-danger">
+            База данных временно недоступна. Часть блоков показана не полностью, попробуйте обновить страницу через минуту.
+          </div>
+        ) : null}
         <div className="actions">
           <div className="pill">Пользователь: {adminSession.user.firstName ?? adminSession.user.username ?? adminSession.user.telegramId}</div>
           <div className="pill">Роли: {adminSession.user.roles.join(", ")}</div>
@@ -187,13 +214,19 @@ export default async function AdminPage() {
 
       <section style={{ marginTop: 18 }} className="card glass">
         <div className="section-label">Структура каталога</div>
-        <div className="grid grid-3">
-          {catalogCategories.map((category) => (
-            <div key={category.slug} className="pill">
-              {category.name}: {catalogProducts.filter((item) => item.categorySlug === category.slug).length}
-            </div>
-          ))}
-        </div>
+        <details className="admin-collapsible-section">
+          <summary className="admin-collapsible-summary">
+            <span>Показать структуру каталога</span>
+            <span className="admin-collapsible-meta">{catalogCategories.length} категорий</span>
+          </summary>
+          <div className="grid grid-3 admin-collapsible-content">
+            {catalogCategories.map((category) => (
+              <div key={category.slug} className="pill">
+                {category.name}: {catalogProducts.filter((item) => item.categorySlug === category.slug).length}
+              </div>
+            ))}
+          </div>
+        </details>
       </section>
 
       <section style={{ marginTop: 18 }} className="card glass">
@@ -230,7 +263,7 @@ export default async function AdminPage() {
 
             return (
               <article key={log.id} className="card glass">
-                <div className="section-label">{log.action}</div>
+                <div className="section-label">{formatAuditAction(log.action)}</div>
                 <strong>{log.summary}</strong>
                 <div className="muted">
                   {log.createdAt.toLocaleString("ru-RU")} • {log.user?.firstName ?? log.user?.telegramUsername ?? log.user?.telegramId ?? "System"}

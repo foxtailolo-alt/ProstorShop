@@ -141,6 +141,9 @@ infra/
 - **Draft-safe admin image editing** — pending product uploads keep background removal and square edits local until the operator presses save; cancel no longer persists image changes.
 - **Homepage admin UX polish** — searchable product picker for homepage sections uses a portal dropdown and works correctly above layered glass sections. Category images now use a dedicated square editor card.
 - **Admin product catalog redesign** — `/admin/products` now has server-side category and status filters, preserved pagination params, richer horizontal cards, and category path labels.
+- **Storefront compliance and branding** — live store footer now includes legal pages, compact contact/requisites block, privacy/consent links, Yandex reviews block, and the real uploaded logo asset in header/footer.
+- **Promo and trade-in expansion** — admin promo code management, scoped promo logic, trade-in promo redemption, accessory attachment, and trade-in bonus models are in the current main branch and deployed.
+- **Competitor pricing runtime hardening** — Playwright is now a runtime dependency for `@prostor/web`; competitor sync can install Chromium on demand and no longer depends on one specific admin machine cache.
 - **Telegram post templates** — publishing and preview use a shared plain-text template builder with optional store footer injection. Premium/custom emoji HTML mode was removed.
 - `Category.imageUrl` field for category grid display.
 - `seoKeywords` field on Category model, rendered as `<meta name="keywords">` on category pages.
@@ -155,6 +158,7 @@ infra/
 - Safe production packaging and env guards exist: `corepack pnpm deploy:pack` and `corepack pnpm --filter @prostor/web build:prod`.
 - Production media storage is externalized via `UPLOADS_DIR=/home/deploy/prostor-uploads`, and release archives no longer overwrite the uploads directory.
 - Verified 2026-04-24: if files were changed only in `apps/web/public/uploads`, a normal `deploy:pack` release is not enough; those media files must be synced to `/home/deploy/prostor-uploads` separately.
+- Verified 2026-05-06: current production is updated through commit `9afd790` (`Preserve legacy user avatar table`), `prostor-web` and `prostor-bot` are active, and public `/catalog`, `/privacy-policy`, and real `/uploads/categories/...` URLs return `200`.
 - Vitest coverage expanded for banners, cart variants, AI specs route, cart-selection helpers, and catalog tree helpers (60 tests across 9 files).
 
 ### Remaining Work
@@ -169,7 +173,7 @@ infra/
 - Consider bcrypt or argon2 for password hashing (currently SHA-256) before launching phone auth publicly.
 - Add AI SEO generation for products (currently only categories have it).
 
-## Next Session Handoff (Updated 2026-04-24)
+## Next Session Handoff (Updated 2026-05-06)
 
 ### Verified Context
 
@@ -193,25 +197,30 @@ infra/
 - The live site already serves the correct login domain `https://88-218-64-61.sslip.io`.
 - Uploaded media must use `UPLOADS_DIR` on production; current VPS value is `/home/deploy/prostor-uploads` and nginx serves `/uploads/*` from the same location.
 - Production code and schema were redeployed successfully on 2026-04-24; the VPS now matches the local workspace commit content for `package.json` and `packages/db/prisma/schema.prisma`.
+- Production was redeployed again on 2026-05-06 through `origin/main` commit `9afd790`; legal pages/footer/logo changes, promo admin, accessory bonus logic, and competitor sync runtime fixes are live.
 - A server backup exists from before the deploy in `/home/deploy/backups` as `ProstorShop_20260424_171441.tgz` and `prostor-uploads_20260424_171441.tgz`.
 - Local product images for AirPods Max 2 were missing on the VPS after deploy because `deploy:pack` excludes uploads by design; they were fixed by syncing local `apps/web/public/uploads` into `/home/deploy/prostor-uploads` separately.
 - When local changes touch uploaded files, the production deploy checklist must include an extra media sync step after code deploy.
+- Same issue repeated for new category images on 2026-05-06: local files existed in `apps/web/public/uploads/categories`, but production `/home/deploy/prostor-uploads/categories` was empty. Fix was a separate sync of those files to the VPS uploads dir.
 - AI specs endpoint uses Responses API (`/v1/responses`) with `web_search_preview` tool for factual data.
 - `infra/ai-proxy/server.py` supports configurable upstream URLs; its real `proxy.env` must stay outside git.
-- Root SSH access on the main VPS accepts `~/.ssh/prostor_tradein_bot_ed25519_nopass` for passwordless deploys.
+- Root SSH access on the main VPS accepts `~/.ssh/prostor_tradein_bot_ed25519_nopass` for passwordless deploys. The same key is currently not accepted for the `deploy` user, so maintenance should use `root@88.218.64.61` unless server access is adjusted.
 - Telegram post publishing is plain-text now; shared formatting lives in `apps/web/lib/telegram-post-template.ts`. Premium/custom emoji HTML formatting was intentionally removed.
 - `/admin/products` now supports server-side `category` and `status` filters with pagination preserving active params.
 - Storefront coverflow uses a seamless loop with duplicated slides to avoid visible edge-jumps; non-active cards remain opaque and cards use solid white backgrounds.
 - Bestsellers cards now also use solid white backgrounds and a more compact layout without stock text.
 - Competitor pricing sync now auto-installs Playwright Chromium on first server run if it is missing and uses a project-local browser cache instead of a user-specific home cache.
+- Production build nuance verified 2026-05-06: before `corepack pnpm --filter @prostor/web build:prod`, export the root env in shell with `set -a && . ./.env && set +a`, otherwise `scripts/assert-public-env.mjs` will not see `NEXT_PUBLIC_SITE_URL`.
+- Prisma deploy nuance verified 2026-05-06: the release must also provide `packages/db/.env` or equivalent `DATABASE_URL`/`DIRECT_URL` values for `prisma db push`; relying only on root `.env` was not enough in the isolated release dir.
+- Prisma schema nuance verified 2026-05-06: keep the `LegacyUserAvatar` mapping in `packages/db/prisma/schema.prisma` until the old `UserAvatar` table is migrated or intentionally removed, otherwise production `db push` stops on destructive data-loss warning.
 
 ### Next Recommended Steps
 
-1. **Deploy to VPS**: `corepack pnpm deploy:pack` → scp → extract → `db push` → restart. Latest code includes square media workflow, homepage admin polish, admin product filters, Telegram post template helpers, and coverflow/bestsellers visual changes.
+1. **Deploy to VPS**: `corepack pnpm deploy:pack` → upload archive to `root@88.218.64.61` → extract to a release dir → copy `/root/.env` and `packages/db/.env` into the release → `set -a && . ./.env && set +a` → `corepack pnpm install --frozen-lockfile` → `db:generate` → `db:push` → `corepack pnpm --filter @prostor/web build:prod` → restart `prostor-web` and `prostor-bot`.
 2. **If media changed locally**: sync `apps/web/public/uploads` to `/home/deploy/prostor-uploads` separately; the release tarball intentionally excludes uploads.
-3. **Populate homepage sections**: Use `/admin/marketing/homepage` to create bestsellers, category grid, and coverflow sections.
-4. Run a full manual production smoke test for login, profile, cart, promo, homepage admin flows, Telegram posting, and Mini App launch.
-5. Fix product options cart/order flow — variants lost on add-to-cart.
+3. **If category images changed locally**: explicitly sync `apps/web/public/uploads/categories/*` to `/home/deploy/prostor-uploads/categories/`; this was the exact missing step for Apple, Dyson, Google, Marshall, and OnePlus category cards on 2026-05-06.
+4. Populate homepage sections via `/admin/marketing/homepage` if storefront merchandising is still incomplete.
+5. Run a focused production smoke test for `/admin/categories`, `/admin/promo-codes`, competitor pricing sync, `/catalog`, `/privacy-policy`, login, profile, cart, and trade-in promo flow.
 6. Convert schema changes into proper Prisma migrations before next structural update.
 7. Verify Telegram posting end-to-end with the current bot token and target channel permissions.
 
@@ -251,8 +260,10 @@ infra/
 ## Media Handling
 
 - Product images can be stored locally in `apps/web/public/uploads`.
+- Category images created via admin currently land in `apps/web/public/uploads/categories` locally.
 - On the VPS, nginx should serve `/uploads/*` from the same directory specified by `UPLOADS_DIR`.
 - Admin product form supports direct JPG, PNG, and WebP upload.
+- Local edits to `apps/web/public/uploads/categories` or other upload subfolders are not shipped by `deploy:pack`; sync them manually to `/home/deploy/prostor-uploads/<subdir>` after code deploy.
 - Uploaded media should be included in VPS backup policy.
 - `corepack pnpm deploy:pack` does not ship local uploads; that is intentional.
 

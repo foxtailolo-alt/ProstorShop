@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { ImageGalleryManager } from "./image-gallery-manager";
 import { ProductOptionsEditor, type ProductOptionsData } from "./product-options-editor";
+import { GlassSelect } from "../../../../components/store/glass-select";
 
 type CategoryNode = {
   id: string;
@@ -104,6 +105,7 @@ export function ProductModal({
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [clipboardLoading, setClipboardLoading] = useState(false);
   const [productOptions, setProductOptions] = useState<ProductOptionsData>(
     product?.options ?? null,
   );
@@ -124,6 +126,35 @@ export function ProductModal({
   }, [pendingUploads]);
 
   useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handleGlobalPaste = (event: ClipboardEvent) => {
+      const dialog = dialogRef.current;
+
+      if (!dialog?.open) {
+        return;
+      }
+
+      const clipboardFiles = extractClipboardImageFiles(event.clipboardData ?? null);
+
+      if (clipboardFiles.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      appendPendingFiles(clipboardFiles);
+    };
+
+    window.addEventListener("paste", handleGlobalPaste);
+
+    return () => {
+      window.removeEventListener("paste", handleGlobalPaste);
+    };
+  }, [open, imageUrls.length, pendingUploads]);
+
+  useEffect(() => {
     return () => {
       pendingUploadsRef.current.forEach((upload) => URL.revokeObjectURL(upload.previewUrl));
     };
@@ -142,6 +173,7 @@ export function ProductModal({
     setAiLoading(false);
     setAiError(null);
     setImageError(null);
+    setClipboardLoading(false);
     setProductOptions(product?.options ?? null);
     setPendingUploads((current) => {
       current.forEach((upload) => URL.revokeObjectURL(upload.previewUrl));
@@ -233,6 +265,42 @@ export function ProductModal({
     syncFileInput(next.map((upload) => upload.file));
   }
 
+  function createPendingUpload(file: File): PendingUpload {
+    return {
+      id: `${file.name}-${file.lastModified}-${crypto.randomUUID()}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+    };
+  }
+
+  function appendPendingFiles(files: File[]) {
+    if (files.length === 0) {
+      return;
+    }
+
+    const imageFiles = files.filter((file) => /^image\/(jpeg|png|webp)$/i.test(file.type));
+
+    if (imageFiles.length === 0) {
+      setImageError("Поддерживаются только JPG, PNG и WebP изображения.");
+      syncFileInput(pendingUploads.map((upload) => upload.file));
+      return;
+    }
+
+    const availableSlots = Math.max(0, 10 - imageUrls.length - pendingUploads.length);
+
+    if (availableSlots === 0) {
+      setImageError("У товара может быть не более 10 изображений.");
+      syncFileInput(pendingUploads.map((upload) => upload.file));
+      return;
+    }
+
+    const acceptedFiles = imageFiles.slice(0, availableSlots);
+    const hasRejectedFiles = acceptedFiles.length < files.length;
+
+    setImageError(hasRejectedFiles ? "Часть файлов пропущена: доступны только JPG/PNG/WebP и максимум 10 изображений." : null);
+    replacePendingUploads([...pendingUploads, ...acceptedFiles.map(createPendingUpload)]);
+  }
+
   function handleImageSelection(event: React.ChangeEvent<HTMLInputElement>) {
     const selectedFiles = Array.from(event.target.files ?? []);
 
@@ -241,18 +309,63 @@ export function ProductModal({
       return;
     }
 
-    const availableSlots = Math.max(0, 10 - imageUrls.length - pendingUploads.length);
-    const acceptedFiles = selectedFiles.slice(0, availableSlots);
+    appendPendingFiles(selectedFiles);
+  }
 
-    setImageError(acceptedFiles.length < selectedFiles.length ? "У товара может быть не более 10 изображений." : null);
+  function extractClipboardImageFiles(dataTransfer: DataTransfer | null) {
+    if (!dataTransfer) {
+      return [] as File[];
+    }
 
-    const nextUploads = acceptedFiles.map((file) => ({
-      id: `${file.name}-${file.lastModified}-${crypto.randomUUID()}`,
-      file,
-      previewUrl: URL.createObjectURL(file),
-    }));
+    return Array.from(dataTransfer.items)
+      .map((item) => item.kind === "file" ? item.getAsFile() : null)
+      .filter((file): file is File => file !== null && /^image\//i.test(file.type));
+  }
 
-    replacePendingUploads([...pendingUploads, ...nextUploads]);
+  function handleImagePaste(event: React.ClipboardEvent<HTMLDivElement>) {
+    const clipboardFiles = extractClipboardImageFiles(event.clipboardData);
+
+    if (clipboardFiles.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    appendPendingFiles(clipboardFiles);
+  }
+
+  async function pasteFromClipboard() {
+    if (!navigator.clipboard?.read) {
+      setImageError("Браузер не разрешает прямое чтение буфера. Нажмите Ctrl+V в зоне загрузки.");
+      return;
+    }
+
+    setClipboardLoading(true);
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      const files: File[] = [];
+
+      for (const item of clipboardItems) {
+        const imageType = item.types.find((type) => /^image\/(png|jpeg|webp)$/i.test(type));
+        if (!imageType) {
+          continue;
+        }
+
+        const blob = await item.getType(imageType);
+        const extension = imageType.split("/")[1] ?? "png";
+        files.push(new File([blob], `clipboard-image-${Date.now()}.${extension}`, { type: imageType }));
+      }
+
+      if (files.length === 0) {
+        setImageError("В буфере обмена не найдено изображение.");
+        return;
+      }
+
+      appendPendingFiles(files);
+    } catch {
+      setImageError("Не удалось прочитать изображение из буфера обмена. Попробуйте Ctrl+V в зоне загрузки.");
+    } finally {
+      setClipboardLoading(false);
+    }
   }
 
   function handlePendingUploadsChange(nextUrls: string[]) {
@@ -371,6 +484,7 @@ export function ProductModal({
           <input type="hidden" name="seoDescription" value={product?.seoDescription ?? ""} />
           <input type="hidden" name="recommendedIds" value={recommendedIds.join(",")} />
           <input type="hidden" name="options" value={productOptions ? JSON.stringify(productOptions) : ""} />
+          <input type="hidden" name="categorySlug" value={selectedCategorySlug} />
           <input
             type="hidden"
             name="specs"
@@ -387,18 +501,15 @@ export function ProductModal({
 
             <label className="admin-modal-field">
               <span>Категория</span>
-              <select
-                name="categorySlug"
-                required
+              <GlassSelect
                 value={selectedCategorySlug}
-                onChange={(e) => setSelectedCategorySlug(e.target.value)}
-              >
-                {flatOptions.map((opt) => (
-                  <option key={opt.slug} value={opt.slug} disabled={opt.disabled}>
-                    {opt.label}{opt.disabled ? " (группа)" : ""}
-                  </option>
-                ))}
-              </select>
+                onChange={setSelectedCategorySlug}
+                options={flatOptions.map((opt) => ({
+                  value: opt.slug,
+                  label: opt.disabled ? `${opt.label} (группа)` : opt.label,
+                  disabled: opt.disabled,
+                }))}
+              />
             </label>
 
             <label className="admin-modal-field">
@@ -501,14 +612,73 @@ export function ProductModal({
 
           <label className="admin-modal-field">
             <span>Добавить фото (JPG/PNG/WebP, до 10)</span>
-            <input
-              ref={fileInputRef}
-              name="imageFiles"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              multiple
-              onChange={handleImageSelection}
-            />
+            <div
+              className="admin-upload-field"
+              tabIndex={0}
+              onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+            >
+              <input
+                ref={fileInputRef}
+                name="imageFiles"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                onChange={handleImageSelection}
+                className="admin-upload-input"
+              />
+              <div className="admin-upload-field-head">
+                <div>
+                  <strong>Перетащите или выберите фото</strong>
+                  <div className="muted">Можно вставить снимок прямо из буфера обмена.</div>
+                </div>
+                <div className="admin-upload-actions">
+                  <button
+                    type="button"
+                    className="button button-secondary button-sm"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    Выбрать фото
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-secondary button-sm"
+                    disabled={clipboardLoading}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void pasteFromClipboard();
+                    }}
+                  >
+                    {clipboardLoading ? "Читаем буфер..." : "Вставить из буфера"}
+                  </button>
+                </div>
+              </div>
+              <div className="admin-upload-meta">
+                <span className="pill pill-muted pill-compact">
+                  Уже загружено: {imageUrls.length + pendingUploads.length} / 10
+                </span>
+                <span className="muted">Ctrl+V работает, когда фокус стоит на этой зоне.</span>
+              </div>
+              {pendingUploads.length > 0 ? (
+                <div className="admin-upload-preview-list">
+                  {pendingUploads.map((upload) => (
+                    <span key={upload.id} className="pill pill-compact">
+                      {upload.file.name}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="admin-upload-empty">Пока нет новых файлов. Поддержка: JPG, PNG, WebP.</div>
+              )}
+            </div>
           </label>
 
           {imageError ? (

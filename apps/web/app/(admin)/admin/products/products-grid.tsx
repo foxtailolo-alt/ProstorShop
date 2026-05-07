@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ProductModal } from "./product-modal";
 import { ConfirmButton } from "../../../../components/admin/confirm-button";
+import { GlassSelect } from "../../../../components/store/glass-select";
 
 type CategoryNode = {
   id: string;
@@ -75,6 +76,8 @@ export function ProductsGrid({
   deleteAction,
 }: Props) {
   const filtersFormRef = useRef<HTMLFormElement>(null);
+  const categoryInputRef = useRef<HTMLInputElement>(null);
+  const statusInputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialProduct = editSku
     ? products.find((p) => p.sku === editSku) ?? null
@@ -85,6 +88,20 @@ export function ProductsGrid({
   const [notice, setNotice] = useState(saveMessage);
   const [pendingSavedSku, setPendingSavedSku] = useState<string | null>(null);
   const [searchDraft, setSearchDraft] = useState(searchQuery);
+  const [categoryDraft, setCategoryDraft] = useState(selectedCategorySlug);
+  const [statusDraft, setStatusDraft] = useState(selectedStatus);
+
+  const categorySelectOptions = [
+    { value: "", label: "Все категории" },
+    ...categoryFilterOptions.map((option) => ({ value: option.slug, label: option.label })),
+  ];
+  const statusSelectOptions = [
+    { value: "all", label: "Все" },
+    { value: "in-stock", label: "В наличии" },
+    { value: "out-of-stock", label: "Нет в наличии" },
+    { value: "with-photo", label: "С фото" },
+    { value: "without-photo", label: "Без фото" },
+  ];
 
   useEffect(() => {
     setNotice(saveMessage);
@@ -93,6 +110,14 @@ export function ProductsGrid({
   useEffect(() => {
     setSearchDraft(searchQuery);
   }, [searchQuery]);
+
+  useEffect(() => {
+    setCategoryDraft(selectedCategorySlug);
+  }, [selectedCategorySlug]);
+
+  useEffect(() => {
+    setStatusDraft(selectedStatus);
+  }, [selectedStatus]);
 
   useEffect(() => {
     if (!editSku) {
@@ -175,6 +200,26 @@ export function ProductsGrid({
     submitFilters();
   }
 
+  function handleCategoryChange(nextValue: string) {
+    setCategoryDraft(nextValue);
+
+    if (categoryInputRef.current) {
+      categoryInputRef.current.value = nextValue;
+    }
+
+    handleFilterChange();
+  }
+
+  function handleStatusChange(nextValue: string) {
+    setStatusDraft(nextValue);
+
+    if (statusInputRef.current) {
+      statusInputRef.current.value = nextValue;
+    }
+
+    handleFilterChange();
+  }
+
   function handleSearchChange(nextValue: string) {
     setSearchDraft(nextValue);
 
@@ -230,6 +275,8 @@ export function ProductsGrid({
 
       <section style={{ marginTop: 16 }}>
         <form ref={filtersFormRef} action="/admin/products" method="get" className="admin-products-toolbar card glass">
+          <input ref={categoryInputRef} type="hidden" name="category" value={categoryDraft} readOnly />
+          <input ref={statusInputRef} type="hidden" name="status" value={statusDraft} readOnly />
           <div className="admin-products-toolbar-left">
             <button className="button button-primary button-sm" type="button" onClick={openNew}>
               Новый товар
@@ -240,32 +287,21 @@ export function ProductsGrid({
             <div className="admin-products-filters-row">
               <label className="admin-products-filter-field">
                 <span className="admin-products-filter-label">Категория</span>
-                <select
-                  name="category"
-                  value={selectedCategorySlug}
-                  onChange={handleFilterChange}
-                  className="field admin-products-select"
-                >
-                  <option value="">Все категории</option>
-                  {categoryFilterOptions.map((option) => (
-                    <option key={option.slug} value={option.slug}>{option.label}</option>
-                  ))}
-                </select>
+                <GlassSelect
+                  value={categoryDraft}
+                  options={categorySelectOptions}
+                  onChange={handleCategoryChange}
+                  placeholder="Все категории"
+                />
               </label>
               <label className="admin-products-filter-field admin-products-filter-field-small">
                 <span className="admin-products-filter-label">Статус</span>
-                <select
-                  name="status"
-                  value={selectedStatus}
-                  onChange={handleFilterChange}
-                  className="field admin-products-select admin-products-select-small"
-                >
-                  <option value="all">Все</option>
-                  <option value="in-stock">В наличии</option>
-                  <option value="out-of-stock">Нет в наличии</option>
-                  <option value="with-photo">С фото</option>
-                  <option value="without-photo">Без фото</option>
-                </select>
+                <GlassSelect
+                  value={statusDraft}
+                  options={statusSelectOptions}
+                  onChange={handleStatusChange}
+                  placeholder="Все"
+                />
               </label>
             </div>
             <label className="admin-products-filter-field admin-products-search-field">

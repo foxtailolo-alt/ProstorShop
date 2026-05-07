@@ -6,7 +6,9 @@ import { prisma } from "@prostor/db";
 import { getSession } from "../../../lib/auth/session";
 import { getAttributionSnapshot } from "../../../lib/attribution";
 import { parseProductOptions, resolveVariantSelection } from "../../../lib/cart-selection";
+import { buildCartEntriesWithPricing } from "../../../lib/cart-pricing";
 import { addCartItem, buildCartItemKey, clearCart, getCartItems, removeCartItem, updateCartItem } from "../../../lib/cart";
+import { findCatalogProductBySlug } from "../../../lib/data/catalog";
 import { generateUniqueOrderNumber, isOrderNumberConflict } from "../../../lib/order-number";
 import { clearAppliedPromoCode, getAppliedPromoCode, getPromoCodeSummary, setAppliedPromoCode } from "../../../lib/promo";
 import { resolveProductPrice } from "../../../lib/pricing";
@@ -33,13 +35,24 @@ export async function addToCartAction(formData: FormData) {
     },
   });
 
-  if (!product) {
+  const fallbackProduct = !product ? await findCatalogProductBySlug(productSlug) : null;
+
+  if (!product && !fallbackProduct) {
     throw new Error("Product was not found.");
   }
 
+  const resolvedProduct = product ?? {
+    price: fallbackProduct!.price,
+    options: null,
+    discountType: fallbackProduct!.discountType,
+    discountValue: fallbackProduct!.discountValue,
+    discountStartsAt: null,
+    discountEndsAt: fallbackProduct!.discountEndsAt ?? null,
+  };
+
   const rawSelection = resolveVariantSelection(
-    Number(product.price),
-    parseProductOptions(product.options),
+    Number(resolvedProduct.price),
+    parseProductOptions(resolvedProduct.options),
     requestedVariant,
   );
 
@@ -47,10 +60,10 @@ export async function addToCartAction(formData: FormData) {
     variantLabel: rawSelection.variantLabel,
     unitPrice: resolveProductPrice({
       basePrice: rawSelection.unitPrice,
-      discountType: product.discountType,
-      discountValue: product.discountValue ? Number(product.discountValue) : null,
-      discountStartsAt: product.discountStartsAt,
-      discountEndsAt: product.discountEndsAt,
+      discountType: resolvedProduct.discountType,
+      discountValue: resolvedProduct.discountValue ? Number(resolvedProduct.discountValue) : null,
+      discountStartsAt: resolvedProduct.discountStartsAt,
+      discountEndsAt: resolvedProduct.discountEndsAt,
     }).price,
   };
 
@@ -61,7 +74,20 @@ export async function addToCartAction(formData: FormData) {
     unitPrice: resolvedSelection.unitPrice,
   });
 
+  const nextCartItems = await getCartItems();
+  const cartCount = nextCartItems.reduce((sum, item) => sum + item.quantity, 0);
+
   revalidatePath("/cart");
+  revalidatePath("/");
+  revalidatePath(`/catalog`);
+
+  if (!redirectToInput) {
+    return {
+      cartCount,
+      productSlug,
+    };
+  }
+
   const redirectTo = redirectToInput.startsWith("/") ? redirectToInput : "/cart";
   const separator = redirectTo.includes("?") ? "&" : "?";
   redirect(`${redirectTo}${separator}added=${productSlug}` as "/cart");
@@ -165,13 +191,20 @@ export async function submitOrderAction(formData: FormData) {
         in: normalizedItems.map((item) => item.productSlug),
       },
     },
+    include: {
+      category: {
+        select: {
+          slug: true,
+        },
+      },
+    },
   });
 
   if (products.length !== normalizedItems.length) {
     throw new Error("One or more cart items were not found.");
   }
 
-  const orderItems = normalizedItems.map((item) => {
+  const resolvedOrderItems = normalizedItems.map((item) => {
     const product = products.find((entry) => entry.slug === item.productSlug);
 
     if (!product) {
@@ -198,10 +231,42 @@ export async function submitOrderAction(formData: FormData) {
 
     return {
       productId: product.id,
+      productSlug: product.slug,
+      categorySlug: product.category.slug,
       quantity: item.quantity,
       variantLabel: resolvedSelection.variantLabel,
-      price: resolvedSelection.unitPrice,
-      subtotal: resolvedSelection.unitPrice * item.quantity,
+      baseUnitPrice: resolvedSelection.unitPrice,
+    };
+  });
+
+  const pricedOrderItems = buildCartEntriesWithPricing({
+    cartItems: resolvedOrderItems.map((item) => ({
+      itemKey: buildCartItemKey(item.productSlug, item.variantLabel),
+      productSlug: item.productSlug,
+      quantity: item.quantity,
+      variantLabel: item.variantLabel,
+      unitPrice: item.baseUnitPrice,
+    })),
+    products: resolvedOrderItems.map((item) => ({
+      slug: item.productSlug,
+      categorySlug: item.categorySlug,
+      productId: item.productId,
+    })),
+  });
+
+  const orderItems = resolvedOrderItems.map((item) => {
+    const pricedItem = pricedOrderItems.find((entry) => entry.item.itemKey === buildCartItemKey(item.productSlug, item.variantLabel));
+
+    if (!pricedItem) {
+      throw new Error("Cart pricing could not be resolved.");
+    }
+
+    return {
+      productId: item.productId,
+      quantity: item.quantity,
+      variantLabel: item.variantLabel,
+      price: pricedItem.effectiveUnitPrice,
+      subtotal: pricedItem.subtotal,
     };
   });
 

@@ -104,33 +104,39 @@ export default async function AdminServicePricingPage({ searchParams }: AdminSer
 
       <section style={{ marginTop: 18 }} className="card glass">
         <div className="section-label">Текущие варианты ремонта</div>
-        <div className="admin-table">
-          <div className="admin-table-row admin-table-head">
-            <div>Бренд</div>
-            <div>Модель</div>
-            <div>Услуга</div>
-            <div>Вариант</div>
-            <div>Цена</div>
-            <div>Источник</div>
-          </div>
-          {rows.map((row) => (
-            <div key={row.variantId} className="admin-table-row">
-              <div>{row.brand}</div>
-              <div>{row.modelName}</div>
-              <div>{row.serviceName}</div>
-              <div>
-                <strong>{row.variantName}</strong>
-                <div className="muted">{row.variantDescription}</div>
-              </div>
-              <div>
-                <strong>{row.totalPrice.toLocaleString("ru-RU")} ₽</strong>
-                <div className="muted">Деталь: {row.partPrice.toLocaleString("ru-RU")} ₽</div>
-                <div className="muted">Работа: {row.laborPrice.toLocaleString("ru-RU")} ₽</div>
-              </div>
-              <div>{row.sourceFile}</div>
+        <details className="admin-collapsible-section">
+          <summary className="admin-collapsible-summary">
+            <span>Показать варианты ремонта</span>
+            <span className="admin-collapsible-meta">{rows.length} записей</span>
+          </summary>
+          <div className="admin-table admin-collapsible-content">
+            <div className="admin-table-row admin-table-head">
+              <div>Бренд</div>
+              <div>Модель</div>
+              <div>Услуга</div>
+              <div>Вариант</div>
+              <div>Цена</div>
+              <div>Источник</div>
             </div>
-          ))}
-        </div>
+            {rows.map((row) => (
+              <div key={row.variantId} className="admin-table-row">
+                <div>{row.brand}</div>
+                <div>{row.modelName}</div>
+                <div>{row.serviceName}</div>
+                <div>
+                  <strong>{row.variantName}</strong>
+                  <div className="muted">{row.variantDescription}</div>
+                </div>
+                <div>
+                  <strong>{row.totalPrice.toLocaleString("ru-RU")} ₽</strong>
+                  <div className="muted">Деталь: {row.partPrice.toLocaleString("ru-RU")} ₽</div>
+                  <div className="muted">Работа: {row.laborPrice.toLocaleString("ru-RU")} ₽</div>
+                </div>
+                <div>{row.sourceFile}</div>
+              </div>
+            ))}
+          </div>
+        </details>
       </section>
 
       <section style={{ marginTop: 18 }} className="card glass">

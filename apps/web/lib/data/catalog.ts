@@ -17,6 +17,14 @@ import { resolveProductPrice } from "../pricing";
 
 type DbCategoryRecord = Awaited<ReturnType<typeof loadDbCategories>>[number];
 type DbProductRecord = Awaited<ReturnType<typeof loadDbProducts>>[number];
+export type StorefrontProduct = CatalogProduct & { hasOptions: boolean };
+
+function mapSeedProduct(record: CatalogProduct): StorefrontProduct {
+  return {
+    ...record,
+    hasOptions: false,
+  };
+}
 
 function databaseConfigured() {
   return Boolean(process.env.DATABASE_URL);
@@ -89,7 +97,7 @@ function mapDbCategory(record: DbCategoryRecord): CatalogCategory {
   };
 }
 
-function mapDbProduct(record: DbProductRecord): CatalogProduct {
+function mapDbProduct(record: DbProductRecord): StorefrontProduct {
   const seedProduct = catalogProducts.find(
     (item) => item.sku === record.sku || item.slug === record.slug,
   );
@@ -148,6 +156,13 @@ function mapDbProduct(record: DbProductRecord): CatalogProduct {
     attributes,
     inStock: record.inStock,
     featured: seedProduct?.featured ?? false,
+    hasOptions: Boolean(
+      record.options &&
+      typeof record.options === "object" &&
+      !Array.isArray(record.options) &&
+      Array.isArray((record.options as { groups?: unknown }).groups) &&
+      (record.options as { groups?: unknown[] }).groups?.length,
+    ),
   };
 }
 
@@ -161,11 +176,11 @@ export async function listCatalogCategories() {
   return dbCategories.map(mapDbCategory);
 }
 
-export async function listCatalogProducts(categorySlug?: string) {
+export async function listCatalogProducts(categorySlug?: string): Promise<StorefrontProduct[]> {
   const dbProducts = await safeQuery(loadDbProducts);
 
   if (!dbProducts) {
-    return categorySlug ? getProductsByCategory(categorySlug) : catalogProducts;
+    return (categorySlug ? getProductsByCategory(categorySlug) : catalogProducts).map(mapSeedProduct);
   }
 
   const mappedProducts = dbProducts.map(mapDbProduct);
@@ -191,7 +206,9 @@ export async function findCatalogProduct(categorySlug: string, productSlug: stri
 
 export async function findCatalogProductBySlug(productSlug: string) {
   const products = await listCatalogProducts();
-  return products.find((product) => product.slug === productSlug) ?? null;
+  const seedProduct = catalogProducts.find((product) => product.slug === productSlug);
+
+  return products.find((product) => product.slug === productSlug) ?? (seedProduct ? mapSeedProduct(seedProduct) : null);
 }
 
 export async function getProductRecommendations(productSlug: string) {
@@ -471,6 +488,7 @@ export type HomepageSectionItem = {
     discountEndsAt?: string;
     inStock: boolean;
     categorySlug: string;
+    hasOptions: boolean;
     badge?: string;
   } | null;
 };
@@ -537,6 +555,13 @@ export async function loadHomepageSections(): Promise<HomepageSectionData[]> {
               discountEndsAt: resolvedPrice.discountEndsAt?.toISOString(),
               inStock: item.product.inStock,
               categorySlug: item.product.category.slug,
+              hasOptions: Boolean(
+                item.product.options &&
+                typeof item.product.options === "object" &&
+                !Array.isArray(item.product.options) &&
+                Array.isArray((item.product.options as { groups?: unknown }).groups) &&
+                (item.product.options as { groups?: unknown[] }).groups?.length,
+              ),
             };
             })()
           : null,

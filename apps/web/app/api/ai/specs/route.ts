@@ -121,9 +121,6 @@ export async function POST(request: NextRequest) {
     input: prompt,
     tools: [{ type: "web_search_preview" }],
     temperature: 0,
-    text: {
-      format: { type: "json_object" },
-    },
   };
 
   // Use Responses API with web_search tool for factual data

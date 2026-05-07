@@ -14,6 +14,15 @@ type TradeInPageProps = {
   }>;
 };
 
+function getInitialCustomerName(session: Awaited<ReturnType<typeof getSession>>) {
+  if (!session) {
+    return "";
+  }
+
+  const fullName = [session.user.firstName, session.user.lastName].filter(Boolean).join(" ").trim();
+  return fullName || session.user.username || "";
+}
+
 export default async function TradeInPage({ searchParams }: TradeInPageProps) {
   const [rules, activeSnapshot, featureFlags, session] = await Promise.all([
     listTradeInRules(),
@@ -24,6 +33,8 @@ export default async function TradeInPage({ searchParams }: TradeInPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const success = resolvedSearchParams?.success === "1";
   const requestId = resolvedSearchParams?.requestId?.trim();
+  const initialCustomerName = getInitialCustomerName(session);
+  const initialPhone = session?.user.phone ?? "";
 
   if (!featureFlags.tradeInEnabled) {
     notFound();
@@ -50,7 +61,20 @@ export default async function TradeInPage({ searchParams }: TradeInPageProps) {
         </section>
       ) : (
         <section className="store-section">
-          {activeSnapshot ? <TradeInWizard snapshot={activeSnapshot} canSaveToProfile={Boolean(session)} /> : <TradeInCalculator rules={rules} />}
+          {activeSnapshot ? (
+            <TradeInWizard
+              snapshot={activeSnapshot}
+              canSaveToProfile={Boolean(session)}
+              initialCustomerName={initialCustomerName}
+              initialPhone={initialPhone}
+            />
+          ) : (
+            <TradeInCalculator
+              rules={rules}
+              initialCustomerName={initialCustomerName}
+              initialPhone={initialPhone}
+            />
+          )}
         </section>
       )}
 

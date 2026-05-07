@@ -18,6 +18,12 @@ import {
 import { findUsedInventoryCandidates } from "../../lib/upgrade-suggestions";
 import { addToCartAction } from "./cart/actions";
 
+async function addToCartFormAction(formData: FormData) {
+  "use server";
+
+  await addToCartAction(formData);
+}
+
 export default async function StorefrontPage() {
   const [catalogCategories, products, featureFlags, banners, categoryTree, homepageSections, session] =
     await Promise.all([
@@ -115,7 +121,7 @@ export default async function StorefrontPage() {
               key={section.id}
               title={section.title}
               items={section.items}
-              addToCartAction={addToCartAction}
+              addToCartAction={addToCartFormAction}
             />
           );
         }
@@ -158,12 +164,20 @@ export default async function StorefrontPage() {
                       <div className="product-card-stock">
                         {p.inStock ? "✓ В наличии" : "Под заказ"}
                       </div>
-                      <form action={addToCartAction} className="product-card-actions">
-                        <input type="hidden" name="productSlug" value={p.slug} />
-                        <input type="hidden" name="quantity" value="1" />
-                        <input type="hidden" name="redirectTo" value="/" />
-                        <button className="button button-primary button-sm" type="submit">В корзину</button>
-                      </form>
+                      {p.hasOptions ? (
+                        <div className="product-card-actions">
+                          <Link className="button button-primary button-sm" href={`/catalog/${p.categorySlug}/${p.slug}?configure=1`}>
+                            В корзину
+                          </Link>
+                        </div>
+                      ) : (
+                        <form action={addToCartFormAction} className="product-card-actions">
+                          <input type="hidden" name="productSlug" value={p.slug} />
+                          <input type="hidden" name="quantity" value="1" />
+                          <input type="hidden" name="redirectTo" value="/" />
+                          <button className="button button-primary button-sm" type="submit">В корзину</button>
+                        </form>
+                      )}
                     </div>
                   </article>
                 );

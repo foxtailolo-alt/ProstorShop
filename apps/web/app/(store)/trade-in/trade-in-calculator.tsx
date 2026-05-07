@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { tradeInConditions, type TradeInRule } from "@prostor/core";
+import { GlassSelect } from "../../../components/store/glass-select";
 import { submitTradeInRequestAction } from "./actions";
 
 type AppliedPromo = {
@@ -15,6 +16,8 @@ type AppliedPromo = {
 
 type TradeInCalculatorProps = {
   rules: TradeInRule[];
+  initialCustomerName?: string;
+  initialPhone?: string;
 };
 
 function getBrands(rules: TradeInRule[]) {
@@ -48,7 +51,7 @@ function calculateQuote(rules: TradeInRule[], input: { brand: string; model: str
   );
 }
 
-export function TradeInCalculator({ rules }: TradeInCalculatorProps) {
+export function TradeInCalculator({ rules, initialCustomerName = "", initialPhone = "" }: TradeInCalculatorProps) {
   const brands = useMemo(() => getBrands(rules), [rules]);
   const [brand, setBrand] = useState(brands[0] ?? "");
   const [model, setModel] = useState(getModels(rules, brands[0] ?? "")[0] ?? "");
@@ -108,62 +111,46 @@ export function TradeInCalculator({ rules }: TradeInCalculatorProps) {
       <div className="form-grid">
         <label className="field">
           <span>Бренд</span>
-          <select
+          <GlassSelect
             value={brand}
-            onChange={(event) => {
-              const nextBrand = event.target.value;
+            onChange={(nextBrand) => {
               const nextModel = getModels(rules, nextBrand)[0] ?? "";
               setBrand(nextBrand);
               setModel(nextModel);
               setStorage(getStorageOptions(rules, nextBrand, nextModel)[0] ?? "");
             }}
-          >
-            {brands.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
+            options={brands.map((item) => ({ value: item, label: item }))}
+          />
         </label>
 
         <label className="field">
           <span>Модель</span>
-          <select
+          <GlassSelect
             value={model}
-            onChange={(event) => {
-              const nextModel = event.target.value;
+            onChange={(nextModel) => {
               setModel(nextModel);
               setStorage(getStorageOptions(rules, brand, nextModel)[0] ?? "");
             }}
-          >
-            {models.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
+            options={models.map((item) => ({ value: item, label: item }))}
+          />
         </label>
 
         <label className="field">
           <span>Память</span>
-          <select value={storage} onChange={(event) => setStorage(event.target.value)}>
-            {storageOptions.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
+          <GlassSelect
+            value={storage}
+            onChange={setStorage}
+            options={storageOptions.map((item) => ({ value: item, label: item }))}
+          />
         </label>
 
         <label className="field">
           <span>Состояние</span>
-          <select value={condition} onChange={(event) => setCondition(event.target.value as typeof condition)}>
-            {tradeInConditions.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
+          <GlassSelect
+            value={condition}
+            onChange={(nextCondition) => setCondition(nextCondition as typeof condition)}
+            options={tradeInConditions.map((item) => ({ value: item.value, label: item.label }))}
+          />
         </label>
       </div>
 
@@ -220,11 +207,11 @@ export function TradeInCalculator({ rules }: TradeInCalculatorProps) {
         <input type="hidden" name="promoBonus" value={String(promoBonus)} />
         <label className="field">
           <span>Имя</span>
-          <input name="customerName" type="text" placeholder="Как к вам обращаться" required />
+          <input name="customerName" type="text" placeholder="Как к вам обращаться" defaultValue={initialCustomerName} required />
         </label>
         <label className="field">
           <span>Телефон</span>
-          <input name="phone" type="tel" placeholder="+7 900 000-00-00" required />
+          <input name="phone" type="tel" placeholder="+7 900 000-00-00" defaultValue={initialPhone} required />
         </label>
         <label className="field field-wide">
           <span>Комментарий</span>

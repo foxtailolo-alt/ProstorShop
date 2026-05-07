@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { GlassSelect } from "../../../components/store/glass-select";
 import {
   buildTradeInFlowState,
   extractTradeInStorage,
@@ -18,6 +19,8 @@ import { submitTradeInRequestAction } from "./actions";
 type TradeInWizardProps = {
   snapshot: TradeInSnapshotGraph;
   canSaveToProfile: boolean;
+  initialCustomerName?: string;
+  initialPhone?: string;
   mode?: "trade-in" | "profile" | "waitlist";
   initialProfileDevice?: {
     deviceId: string;
@@ -68,7 +71,14 @@ function extractDisplaySizeFromTitle(value: string | undefined) {
   return match?.[1] ?? null;
 }
 
-export function TradeInWizard({ snapshot, canSaveToProfile, mode = "trade-in", initialProfileDevice = null }: TradeInWizardProps) {
+export function TradeInWizard({
+  snapshot,
+  canSaveToProfile,
+  initialCustomerName = "",
+  initialPhone = "",
+  mode = "trade-in",
+  initialProfileDevice = null,
+}: TradeInWizardProps) {
   const categories = useMemo(() => getActiveTradeInCategories(snapshot), [snapshot]);
   const initialCategoryCode = initialProfileDevice?.categoryCode ?? categories[0]?.categoryCode ?? "";
   const initialModelCode = initialProfileDevice?.deviceModelCode ?? getTradeInModels(snapshot, initialCategoryCode)[0]?.code ?? "";
@@ -242,39 +252,34 @@ export function TradeInWizard({ snapshot, canSaveToProfile, mode = "trade-in", i
       <div className="form-grid">
         <label className="field">
           <span>Категория</span>
-          <select
+          <GlassSelect
             value={categoryCode}
-            onChange={(event) => {
-              const nextCategoryCode = event.target.value;
+            onChange={(nextCategoryCode) => {
               const nextModelCode = getTradeInModels(snapshot, nextCategoryCode)[0]?.code ?? "";
               setCategoryCode(nextCategoryCode);
               setModelCode(nextModelCode);
               setAnswers({});
             }}
-          >
-            {categories.map((category) => (
-              <option key={category.categoryCode} value={category.categoryCode}>
-                {category.title}
-              </option>
-            ))}
-          </select>
+            options={categories.map((category) => ({
+              value: category.categoryCode,
+              label: category.title,
+            }))}
+          />
         </label>
 
         <label className="field field-wide">
           <span>Модель</span>
-          <select
+          <GlassSelect
             value={modelCode}
-            onChange={(event) => {
-              setModelCode(event.target.value);
+            onChange={(nextModelCode) => {
+              setModelCode(nextModelCode);
               setAnswers({});
             }}
-          >
-            {models.map((model) => (
-              <option key={model.code} value={model.code}>
-                {model.title}
-              </option>
-            ))}
-          </select>
+            options={models.map((model) => ({
+              value: model.code,
+              label: model.title,
+            }))}
+          />
         </label>
 
         {flowState.questions.map((question) => (
@@ -282,10 +287,9 @@ export function TradeInWizard({ snapshot, canSaveToProfile, mode = "trade-in", i
             <span>
               Шаг {Math.min(question.stepIndex, Math.max(totalQuestionCount, question.stepIndex))}. {question.title}
             </span>
-            <select
+            <GlassSelect
               value={flowState.resolvedAnswers[question.code] ?? ""}
-              onChange={(event) => {
-                const nextAnswerCode = event.target.value;
+              onChange={(nextAnswerCode) => {
                 const nextAnswers: Record<string, string> = {};
                 for (const currentQuestion of flowState.questions) {
                   if (currentQuestion.stepIndex < question.stepIndex) {
@@ -300,14 +304,14 @@ export function TradeInWizard({ snapshot, canSaveToProfile, mode = "trade-in", i
                 }
                 setAnswers(nextAnswers);
               }}
-            >
-              <option value="">Выберите вариант</option>
-              {question.options.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.title}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "Выберите вариант" },
+                ...question.options.map((option) => ({
+                  value: option.code,
+                  label: option.title,
+                })),
+              ]}
+            />
           </label>
         ))}
       </div>
@@ -391,21 +395,25 @@ export function TradeInWizard({ snapshot, canSaveToProfile, mode = "trade-in", i
         ) : mode === "waitlist" ? (
           <label className="field field-wide">
             <span>Цвет</span>
-            <select name="color" value={waitlistColor} onChange={(event) => setWaitlistColor(event.target.value)}>
-              {WAITLIST_COLOR_OPTIONS.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
+            <input type="hidden" name="color" value={waitlistColor} />
+            <GlassSelect
+              value={waitlistColor}
+              onChange={setWaitlistColor}
+              options={WAITLIST_COLOR_OPTIONS.map((option) => ({
+                value: option,
+                label: option,
+              }))}
+            />
           </label>
         ) : (
           <>
             <label className="field">
               <span>Имя</span>
-              <input name="customerName" type="text" placeholder="Как к вам обращаться" required />
+              <input name="customerName" type="text" placeholder="Как к вам обращаться" defaultValue={initialCustomerName} required />
             </label>
             <label className="field">
               <span>Телефон</span>
-              <input name="phone" type="tel" placeholder="+7 900 000-00-00" required />
+              <input name="phone" type="tel" placeholder="+7 900 000-00-00" defaultValue={initialPhone} required />
             </label>
             <label className="field field-wide">
               <span>Комментарий</span>

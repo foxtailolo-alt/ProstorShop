@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AddToCartButton } from "../cart/add-to-cart-button";
 import { ProductOptionPicker } from "./product-option-picker";
 import { resolveProductPrice } from "../../lib/pricing";
 
@@ -20,9 +21,10 @@ type Props = {
   discountEndsAt?: string;
   badge?: string;
   inStock: boolean;
+  productName: string;
   slug: string;
   categorySlug: string;
-  addToCartAction: (formData: FormData) => void;
+  addToCartAction: (formData: FormData) => Promise<{ cartCount: number; productSlug: string }>;
 };
 
 export function ProductInfoWithOptions({
@@ -34,6 +36,7 @@ export function ProductInfoWithOptions({
   discountEndsAt,
   badge,
   inStock,
+  productName,
   slug,
   categorySlug,
   addToCartAction,
@@ -68,16 +71,17 @@ export function ProductInfoWithOptions({
         {inStock ? "✓ В наличии" : "Под заказ"}
       </div>
 
-      <form action={addToCartAction} className="product-page-actions">
-        <input type="hidden" name="productSlug" value={slug} />
-        <input type="hidden" name="quantity" value="1" />
-        <input type="hidden" name="variant" value={variantLabel} />
-        <input type="hidden" name="variantPrice" value={displayPricing.price} />
-        <input type="hidden" name="redirectTo" value={`/catalog/${categorySlug}/${slug}`} />
-        <button className="button button-primary button-lg" type="submit">
-          Добавить в корзину
-        </button>
-      </form>
+      <div className="product-page-actions">
+        <AddToCartButton
+          addToCartAction={addToCartAction}
+          productSlug={slug}
+          productName={productName}
+          variantLabel={variantLabel}
+          className="button button-primary button-lg"
+          label="Добавить в корзину"
+          pendingLabel="Добавляем в корзину..."
+        />
+      </div>
     </>
   );
 }

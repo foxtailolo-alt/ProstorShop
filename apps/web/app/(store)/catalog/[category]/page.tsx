@@ -16,6 +16,12 @@ import {
   type CategoryTreeNode,
 } from "../../../../lib/data/catalog";
 
+async function addToCartFormAction(formData: FormData) {
+  "use server";
+
+  await addToCartAction(formData);
+}
+
 type CategoryPageProps = {
   params: Promise<{
     category: string;
@@ -201,15 +207,23 @@ async function LeafCategoryProducts({ categorySlug }: { categorySlug: string }) 
               <div className="product-card-stock">
                 {product.inStock ? "✓ В наличии" : "Под заказ"}
               </div>
-              <form action={addToCartAction} className="product-card-actions">
-                <input type="hidden" name="productSlug" value={product.slug} />
-                <input type="hidden" name="quantity" value="1" />
-                <input type="hidden" name="redirectTo" value={`/catalog/${categorySlug}`} />
-                <button className="button button-primary button-sm" type="submit">В корзину</button>
+              <div className="product-card-actions">
+                {product.hasOptions ? (
+                  <Link className="button button-primary button-sm" href={`/catalog/${categorySlug}/${product.slug}?configure=1`}>
+                    В корзину
+                  </Link>
+                ) : (
+                  <form action={addToCartFormAction} className="product-card-actions">
+                    <input type="hidden" name="productSlug" value={product.slug} />
+                    <input type="hidden" name="quantity" value="1" />
+                    <input type="hidden" name="redirectTo" value={`/catalog/${categorySlug}`} />
+                    <button className="button button-primary button-sm" type="submit">В корзину</button>
+                  </form>
+                )}
                 <Link className="button button-secondary button-sm" href={`/catalog/${categorySlug}/${product.slug}`}>
                   Подробнее
                 </Link>
-              </form>
+              </div>
             </div>
           </article>
         ))}

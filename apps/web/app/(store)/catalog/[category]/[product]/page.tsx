@@ -6,13 +6,19 @@ import { StoreNav } from "../../../../../components/layout/store-nav";
 import { buildAbsoluteUrl } from "../../../../../lib/seo";
 import { findCatalogProduct, findCatalogProductBySlug, findNodeBySlug, getProductRecommendations, getProductOptions, loadCategoryTree, getCategoryPath } from "../../../../../lib/data/catalog";
 import { addToCartAction } from "../../../cart/actions";
+import { AddToCartButton } from "../../../../../components/cart/add-to-cart-button";
+import { ProductDescription } from "../../../../../components/product/product-description";
 import { ProductGallery } from "../../../../../components/product/product-gallery";
 import { ProductInfoWithOptions } from "../../../../../components/product/product-info-options";
+import { isAccessoryProduct, resolveAccessoryBundlePricing } from "../../../../../lib/cart-pricing";
 
 type ProductPageProps = {
   params: Promise<{
     category: string;
     product: string;
+  }>;
+  searchParams?: Promise<{
+    configure?: string;
   }>;
 };
 
@@ -61,10 +67,12 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   };
 }
 
-export default async function ProductPage({ params }: ProductPageProps) {
+export default async function ProductPage({ params, searchParams }: ProductPageProps) {
   const rawParams = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const category = decodeRouteParam(rawParams.category);
   const product = decodeRouteParam(rawParams.product);
+  const configurePrompt = resolvedSearchParams?.configure === "1";
   const [categoryMatchedProduct, productBySlug] = await Promise.all([
     findCatalogProduct(category, product),
     findCatalogProductBySlug(product),
@@ -73,7 +81,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const currentProduct = categoryMatchedProduct ?? productBySlug;
 
   if (currentProduct && currentProduct.categorySlug !== category) {
-    redirect(`/catalog/${currentProduct.categorySlug}/${currentProduct.slug}`);
+    redirect(`/catalog/${currentProduct.categorySlug}/${currentProduct.slug}${configurePrompt ? "?configure=1" : ""}`);
   }
 
   if (!currentProduct) {
@@ -142,13 +150,21 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <span>{currentProduct.name}</span>
       </div>
 
-      <section className="product-page glass animate-scale-in">
+      {configurePrompt && productOptions?.groups?.length ? (
+        <section className="store-section">
+          <div className="added-notice glass">
+            <span>Выберите конфигурацию перед добавлением в корзину</span>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="product-page glass animate-scale-in" data-cart-source-root>
         <div className="grid grid-2 product-hero-grid">
           <ProductGallery images={productImages} productName={currentProduct.name} />
           <div className="product-page-info">
             <span className="product-card-brand">{currentProduct.brand}</span>
             <h1 className="product-page-title">{currentProduct.name}</h1>
-            <p className="product-page-summary">{currentProduct.summary}</p>
+            <ProductDescription text={currentProduct.summary} />
 
             {productOptions?.groups?.length ? (
               <ProductInfoWithOptions
@@ -160,6 +176,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 discountEndsAt={currentProduct.discountEndsAt}
                 badge={currentProduct.badge}
                 inStock={currentProduct.inStock}
+                productName={currentProduct.name}
                 slug={currentProduct.slug}
                 categorySlug={resolvedCategory.slug}
                 addToCartAction={addToCartAction}
@@ -178,14 +195,16 @@ export default async function ProductPage({ params }: ProductPageProps) {
                   {currentProduct.inStock ? "✓ В наличии" : "Под заказ"}
                 </div>
 
-                <form action={addToCartAction} className="product-page-actions">
-                  <input type="hidden" name="productSlug" value={currentProduct.slug} />
-                  <input type="hidden" name="quantity" value="1" />
-                  <input type="hidden" name="redirectTo" value={`/catalog/${resolvedCategory.slug}/${currentProduct.slug}`} />
-                  <button className="button button-primary button-lg" type="submit">
-                    Добавить в корзину
-                  </button>
-                </form>
+                <div className="product-page-actions">
+                  <AddToCartButton
+                    addToCartAction={addToCartAction}
+                    productSlug={currentProduct.slug}
+                    productName={currentProduct.name}
+                    className="button button-primary button-lg"
+                    label="Добавить в корзину"
+                    pendingLabel="Добавляем в корзину..."
+                  />
+                </div>
               </>
             )}
 
@@ -216,25 +235,63 @@ export default async function ProductPage({ params }: ProductPageProps) {
           <div className="grid grid-4">
             {recommendations.map((rec) => {
               const recImage = rec.imageUrls?.[0] ?? rec.imageUrl;
+              const accessoryBundlePricing = isAccessoryProduct(rec)
+                ? resolveAccessoryBundlePricing(rec.price)
+                : null;
+
               return (
-                <Link
+                <article
                   key={rec.sku}
-                  href={`/catalog/${rec.categorySlug}/${rec.slug}`}
                   className="product-card glass"
+                  data-cart-source-root
                 >
-                  {recImage ? (
-                    <div className="product-card-media">
-                      <img src={recImage} alt={rec.name} className="product-card-image" loading="lazy" />
-                    </div>
-                  ) : (
-                    <div className="product-card-media product-card-media-empty" />
-                  )}
+                  <Link href={`/catalog/${rec.categorySlug}/${rec.slug}`}>
+                    {recImage ? (
+                      <div className="product-card-media">
+                        <img src={recImage} alt={rec.name} className="product-card-image" loading="lazy" />
+                      </div>
+                    ) : (
+                      <div className="product-card-media product-card-media-empty" />
+                    )}
+                  </Link>
                   <div className="product-card-body">
                     <span className="product-card-brand">{rec.brand}</span>
-                    <span className="product-card-name">{rec.name}</span>
-                    <span className="product-card-price">{rec.price.toLocaleString("ru-RU")} ₽</span>
+                    <Link href={`/catalog/${rec.categorySlug}/${rec.slug}`} className="product-card-name">{rec.name}</Link>
+                    <div className="product-card-price-stack">
+                      <div className="product-card-price-row">
+                        <span className="product-card-price">
+                          {(accessoryBundlePricing?.discountedPrice ?? rec.price).toLocaleString("ru-RU")} ₽
+                        </span>
+                        {accessoryBundlePricing ? (
+                          <>
+                            <span className="product-card-old-price">{accessoryBundlePricing.compareAtPrice.toLocaleString("ru-RU")} ₽</span>
+                            <span className="product-card-discount-pill">-{accessoryBundlePricing.discountPercent}%</span>
+                          </>
+                        ) : rec.compareAtPrice ? (
+                          <span className="product-card-old-price">{rec.compareAtPrice.toLocaleString("ru-RU")} ₽</span>
+                        ) : null}
+                      </div>
+                      {accessoryBundlePricing ? <span className="product-card-bundle-note">Цена с устройством</span> : null}
+                    </div>
+                    {rec.hasOptions ? (
+                      <div className="product-card-actions">
+                        <Link className="button button-primary button-sm" href={`/catalog/${rec.categorySlug}/${rec.slug}?configure=1`}>
+                          Выбрать конфигурацию
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="product-card-actions">
+                        <AddToCartButton
+                          addToCartAction={addToCartAction}
+                          productSlug={rec.slug}
+                          productName={rec.name}
+                          className="button button-primary button-sm"
+                          label="Добавить в корзину"
+                        />
+                      </div>
+                    )}
                   </div>
-                </Link>
+                </article>
               );
             })}
           </div>

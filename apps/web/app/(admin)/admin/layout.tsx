@@ -7,6 +7,7 @@ import { MarketingToggle } from "../../../components/admin/marketing-toggle";
 
 const adminNavigation = [
   { href: "/admin", label: "Обзор", marketing: false },
+  { href: "/admin/clients", label: "Клиенты", marketing: false },
   { href: "/admin/orders", label: "Заказы", marketing: false },
   { href: "/admin/activity", label: "Журнал", marketing: false },
   { href: "/admin/categories", label: "Категории", marketing: false },

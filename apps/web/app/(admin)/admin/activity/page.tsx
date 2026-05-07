@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { prisma } from "@prostor/db";
-import { getAuditMetadataEntries } from "../../../../lib/audit";
+import {
+  formatAuditAction,
+  formatAuditEntityType,
+  getAuditMetadataEntries,
+} from "../../../../lib/audit";
 import { AdminPagination, PAGE_SIZE } from "../../../../components/admin/admin-pagination";
 
 type AdminActivityPageProps = {
@@ -72,10 +76,10 @@ export default async function AdminActivityPage({ searchParams }: AdminActivityP
             Все события
           </Link>
           {entityFilter ? (
-            <div className="pill">Entity: {entityFilter}</div>
+            <div className="pill">Сущность: {formatAuditEntityType(entityFilter)}</div>
           ) : null}
           {actionFilter ? (
-            <div className="pill">Action: {actionFilter}</div>
+            <div className="pill">Действие: {formatAuditAction(actionFilter)}</div>
           ) : null}
         </div>
       </section>
@@ -90,7 +94,7 @@ export default async function AdminActivityPage({ searchParams }: AdminActivityP
                 className={`button ${entityFilter === entityType ? "button-primary" : "button-secondary"}`}
                 href={`/admin/activity?entity=${encodeURIComponent(entityType)}` as "/"}
               >
-                {entityType} ({count})
+                {formatAuditEntityType(entityType)} ({count})
               </Link>
             ))}
           </div>
@@ -104,7 +108,7 @@ export default async function AdminActivityPage({ searchParams }: AdminActivityP
                 className={`button ${actionFilter === action ? "button-primary" : "button-secondary"}`}
                 href={`/admin/activity?action=${encodeURIComponent(action)}` as "/"}
               >
-                {action} ({count})
+                {formatAuditAction(action)} ({count})
               </Link>
             ))}
           </div>
@@ -113,58 +117,67 @@ export default async function AdminActivityPage({ searchParams }: AdminActivityP
 
       <section style={{ marginTop: 18 }} className="card glass">
         <div className="section-label">Последние действия ({totalCount})</div>
-        <div className="admin-table">
-          <div className="admin-table-row admin-table-head">
-            <div>Когда</div>
-            <div>Пользователь</div>
-            <div>Действие</div>
-            <div>Сущность</div>
-            <div>Описание</div>
-          </div>
-          {logs.map((log) => (
-            <div key={log.id} className="admin-table-row">
-              <div>{log.createdAt.toLocaleString("ru-RU")}</div>
-              <div>
-                {log.user
-                  ? log.user.firstName ?? log.user.telegramUsername ?? log.user.telegramId ?? log.user.id
-                  : "System"}
+        <details className="admin-collapsible-section">
+          <summary className="admin-collapsible-summary">
+            <span>Показать журнал</span>
+            <span className="admin-collapsible-meta">{totalCount} событий</span>
+          </summary>
+          <div className="admin-collapsible-content">
+            <div className="admin-table">
+              <div className="admin-table-row admin-table-head">
+                <div>Когда</div>
+                <div>Пользователь</div>
+                <div>Действие</div>
+                <div>Сущность</div>
+                <div>Описание</div>
               </div>
-              <div>{log.action}</div>
-              <div>
-                <strong>{log.entityType}</strong>
-                {log.entityId ? <div className="muted">{log.entityId}</div> : null}
-              </div>
-              <div className="grid">
-                <div>{log.summary}</div>
-                {getAuditMetadataEntries(log.metadata).length > 0 ? (
-                  <div className="actions">
-                    {getAuditMetadataEntries(log.metadata).map((entry) => (
-                      <div key={`${log.id}-${entry.key}`} className="pill pill-compact">
-                        {entry.key}: {entry.value}
-                      </div>
-                    ))}
+              {logs.map((log) => (
+                <div key={log.id} className="admin-table-row">
+                  <div>{log.createdAt.toLocaleString("ru-RU")}</div>
+                  <div>
+                    {log.user
+                      ? log.user.firstName ?? log.user.telegramUsername ?? log.user.telegramId ?? log.user.id
+                      : "System"}
                   </div>
-                ) : null}
-                {log.entityType === "product" && log.metadata && typeof log.metadata === "object" && !Array.isArray(log.metadata) && "sku" in log.metadata && typeof log.metadata.sku === "string" ? (
-                  <Link className="button button-secondary" href="/admin/products">
-                    Открыть товары
-                  </Link>
-                ) : null}
-              </div>
+                  <div>{formatAuditAction(log.action)}</div>
+                  <div>
+                    <strong>{formatAuditEntityType(log.entityType)}</strong>
+                    <div className="muted" style={{ fontSize: 12 }}>{log.entityType}</div>
+                    {log.entityId ? <div className="muted">{log.entityId}</div> : null}
+                  </div>
+                  <div className="grid">
+                    <div>{log.summary}</div>
+                    {getAuditMetadataEntries(log.metadata).length > 0 ? (
+                      <div className="actions">
+                        {getAuditMetadataEntries(log.metadata).map((entry) => (
+                          <div key={`${log.id}-${entry.key}`} className="pill pill-compact">
+                            {entry.key}: {entry.value}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {log.entityType === "product" && log.metadata && typeof log.metadata === "object" && !Array.isArray(log.metadata) && "sku" in log.metadata && typeof log.metadata.sku === "string" ? (
+                      <Link className="button button-secondary" href="/admin/products">
+                        Открыть товары
+                      </Link>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        {totalPages > 1 && (
-          <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "center", marginTop: 16 }}>
-            {currentPage > 1 && (
-              <Link href={`/admin/activity?${new URLSearchParams({ ...(entityFilter ? { entity: entityFilter } : {}), ...(actionFilter ? { action: actionFilter } : {}), page: String(currentPage - 1) }).toString()}` as "/"} className="button button-secondary button-sm">← Назад</Link>
-            )}
-            <span style={{ fontSize: 13, color: "var(--muted)" }}>{currentPage} / {totalPages}</span>
-            {currentPage < totalPages && (
-              <Link href={`/admin/activity?${new URLSearchParams({ ...(entityFilter ? { entity: entityFilter } : {}), ...(actionFilter ? { action: actionFilter } : {}), page: String(currentPage + 1) }).toString()}` as "/"} className="button button-secondary button-sm">Вперёд →</Link>
+            {totalPages > 1 && (
+              <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "center", marginTop: 16 }}>
+                {currentPage > 1 && (
+                  <Link href={`/admin/activity?${new URLSearchParams({ ...(entityFilter ? { entity: entityFilter } : {}), ...(actionFilter ? { action: actionFilter } : {}), page: String(currentPage - 1) }).toString()}` as "/"} className="button button-secondary button-sm">← Назад</Link>
+                )}
+                <span style={{ fontSize: 13, color: "var(--muted)" }}>{currentPage} / {totalPages}</span>
+                {currentPage < totalPages && (
+                  <Link href={`/admin/activity?${new URLSearchParams({ ...(entityFilter ? { entity: entityFilter } : {}), ...(actionFilter ? { action: actionFilter } : {}), page: String(currentPage + 1) }).toString()}` as "/"} className="button button-secondary button-sm">Вперёд →</Link>
+                )}
+              </div>
             )}
           </div>
-        )}
+        </details>
       </section>
     </main>
   );

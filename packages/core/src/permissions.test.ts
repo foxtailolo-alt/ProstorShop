@@ -25,6 +25,7 @@ describe("hasPermission", () => {
 
   it("manager can write orders but not settings", () => {
     expect(hasPermission("manager", "orders", "write")).toBe(true);
+    expect(hasPermission("manager", "clients", "write")).toBe(true);
     expect(hasPermission("manager", "settings", "write")).toBe(false);
     expect(hasPermission("manager", "settings", "read")).toBe(true);
   });
@@ -33,5 +34,10 @@ describe("hasPermission", () => {
     expect(hasPermission("manager", "products", "delete")).toBe(true);
     expect(hasPermission("manager", "banners", "delete")).toBe(true);
     expect(hasPermission("manager", "orders", "delete")).toBe(false);
+  });
+
+  it("viewer can read clients but not edit them", () => {
+    expect(hasPermission("viewer", "clients", "read")).toBe(true);
+    expect(hasPermission("viewer", "clients", "write")).toBe(false);
   });
 });

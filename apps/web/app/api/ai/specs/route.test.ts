@@ -137,6 +137,19 @@ describe("AI specs route", () => {
       },
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.openai.com/v1/responses",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.any(String),
+      }),
+    );
+
+    const requestInit = fetchMock.mock.calls[0]?.[1] as { body?: string };
+    const payload = JSON.parse(requestInit.body ?? "{}");
+
+    expect(payload.tools).toEqual([{ type: "web_search_preview" }]);
+    expect(payload.text).toBeUndefined();
   });
 
   it("returns 502 when AI response cannot be parsed as JSON", async () => {

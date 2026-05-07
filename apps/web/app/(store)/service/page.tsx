@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StoreNav } from "../../../components/layout/store-nav";
+import { getSession } from "../../../lib/auth/session";
 import { getRuntimeFeatureFlags } from "../../../lib/data/catalog";
 import { listServiceCatalogEntries } from "../../../lib/data/pricing";
 import { ServiceCalculator } from "./service-calculator";
@@ -12,14 +13,26 @@ type ServicePageProps = {
   }>;
 };
 
+function getInitialCustomerName(session: Awaited<ReturnType<typeof getSession>>) {
+  if (!session) {
+    return "";
+  }
+
+  const fullName = [session.user.firstName, session.user.lastName].filter(Boolean).join(" ").trim();
+  return fullName || session.user.username || "";
+}
+
 export default async function ServicePage({ searchParams }: ServicePageProps) {
-  const [serviceCatalogEntries, featureFlags] = await Promise.all([
+  const [serviceCatalogEntries, featureFlags, session] = await Promise.all([
     listServiceCatalogEntries(),
     getRuntimeFeatureFlags(),
+    getSession(),
   ]);
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const success = resolvedSearchParams?.success === "1";
   const requestId = resolvedSearchParams?.requestId?.trim();
+  const initialCustomerName = getInitialCustomerName(session);
+  const initialPhone = session?.user.phone ?? "";
 
   if (!featureFlags.serviceEnabled) {
     notFound();
@@ -46,7 +59,11 @@ export default async function ServicePage({ searchParams }: ServicePageProps) {
         </section>
       ) : (
         <section className="store-section">
-          <ServiceCalculator entries={serviceCatalogEntries} />
+          <ServiceCalculator
+            entries={serviceCatalogEntries}
+            initialCustomerName={initialCustomerName}
+            initialPhone={initialPhone}
+          />
         </section>
       )}
 

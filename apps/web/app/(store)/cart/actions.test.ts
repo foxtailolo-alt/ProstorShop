@@ -150,6 +150,7 @@ describe("cart actions", () => {
       {
         id: "product-1",
         slug: "iphone-16",
+        category: { slug: "iphone" },
         price: 94990,
         options: {
           groups: [
@@ -210,5 +211,49 @@ describe("cart actions", () => {
     expect(mockRevalidatePath).toHaveBeenCalledWith("/admin");
     expect(mockRevalidatePath).toHaveBeenCalledWith("/admin/orders");
     expect(mockRevalidatePath).toHaveBeenCalledWith("/profile");
+  });
+
+  it("submitOrderAction keeps accessory discount inactive without a device in cart", async () => {
+    const { submitOrderAction } = await import("./actions");
+
+    mockGetCartItems.mockResolvedValue([
+      {
+        itemKey: "apple-20w",
+        productSlug: "apple-20w",
+        quantity: 1,
+        unitPrice: 2800,
+      },
+    ]);
+    mockProductFindMany.mockResolvedValue([
+      {
+        id: "product-2",
+        slug: "apple-20w",
+        category: { slug: "accessories" },
+        price: 2800,
+        options: null,
+      },
+    ]);
+
+    const formData = new FormData();
+    formData.set("customerName", "Покупатель");
+    formData.set("phone", "+79990000000");
+
+    await expect(submitOrderAction(formData)).rejects.toThrow(
+      "NEXT_REDIRECT:/cart?success=1&orderId=order-1&orderNumber=A56348",
+    );
+
+    expect(mockOrderCreate).toHaveBeenLastCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        total: 2800,
+        items: {
+          create: [
+            expect.objectContaining({
+              productId: "product-2",
+              price: 2800,
+            }),
+          ],
+        },
+      }),
+    }));
   });
 });

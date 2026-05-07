@@ -164,6 +164,7 @@ infra/
 - Verified 2026-04-24: if files were changed only in `apps/web/public/uploads`, a normal `deploy:pack` release is not enough; those media files must be synced to `/home/deploy/prostor-uploads` separately.
 - Verified 2026-05-06: current production is updated through commit `9afd790` (`Preserve legacy user avatar table`), `prostor-web` and `prostor-bot` are active, and public `/catalog`, `/privacy-policy`, and real `/uploads/categories/...` URLs return `200`.
 - Verified 2026-05-07: production is now updated through commit `8cb0c27` (`Improve storefront cart UX and admin tools`); `typecheck`, full `vitest`, local `@prostor/web build`, server `build:prod`, and public `curl -I` checks for `/`, `/profile`, and `/login` all passed.
+- Verified 2026-05-07: same-day prod hotfixes restored the shared storefront footer and recovered AI generation by re-adding `OPENAI_PROXY_URL=http://170.168.33.63:3100` and `OPENAI_PROXY_SECRET` to `/home/deploy/ProstorShop/.env`; live authenticated validation confirmed `/api/ai/seo` returns `200` again.
 - Vitest coverage expanded to 123 tests across 19 files, including cart pricing, cart actions, AI specs route, permissions, attribution, catalog tree, competitor sync, and auth session flows.
 
 ### Remaining Work
@@ -172,6 +173,7 @@ infra/
 - Run a focused production smoke check for the newly shipped flows: `/admin/clients`, `/admin/orders`, no-reload add-to-cart, recommended product add buttons, accessory bundle discount, and trade-in/service autofill.
 - **Populate homepage sections** — use admin UI at `/admin/marketing/homepage` to create bestsellers, category grid, and coverflow sections with real product data.
 - Run a full post-deploy smoke check for the live stack: `/login`, `/profile`, cart promo flow, referral promo flow, homepage section management, Telegram post publishing, and Mini App launch from bot.
+- Preserve production AI env during deploys: after any release, verify `/home/deploy/ProstorShop/.env` still contains `OPENAI_PROXY_URL` and `OPENAI_PROXY_SECRET`, because current VPS egress should use the supported-region proxy rather than direct OpenAI.
 - Apply and document the Prisma migration path for production instead of relying only on `db push` as the schema continues to grow.
 - Finish production setup for Telegram posting and verify the target channel/group permissions with the current bot token.
 - Test phone auth flow end-to-end on production (register, login, profile display, logout).
@@ -179,7 +181,7 @@ infra/
 - Add AI SEO generation for products (currently only categories have it).
 - Investigate the remaining Telegram Mini App hydration/client warnings in dev; they did not block this release, but they still appear during local browser validation.
 
-## Next Session Handoff (Updated 2026-05-07)
+## Next Session Handoff (Updated 2026-05-07, post-prod-hotfix)
 
 ### Verified Context
 
@@ -205,12 +207,16 @@ infra/
 - Production code and schema were redeployed successfully on 2026-04-24; the VPS now matches the local workspace commit content for `package.json` and `packages/db/prisma/schema.prisma`.
 - Production was redeployed again on 2026-05-06 through `origin/main` commit `9afd790`; legal pages/footer/logo changes, promo admin, accessory bonus logic, and competitor sync runtime fixes are live.
 - Production was redeployed again on 2026-05-07 through `origin/main` commit `8cb0c27`; the release includes the new cart UX, recommended-item add buttons, accessory bundle pricing, admin clients CRM view, order queue redesign, trade-in/service autofill, and updated mobile/storefront polish.
+- Same-day prod hotfixes on 2026-05-07 restored the shared storefront footer and recovered AI generation after an env regression removed AI settings from `/home/deploy/ProstorShop/.env`.
 - A server backup exists from before the deploy in `/home/deploy/backups` as `ProstorShop_20260424_171441.tgz` and `prostor-uploads_20260424_171441.tgz`.
 - Local product images for AirPods Max 2 were missing on the VPS after deploy because `deploy:pack` excludes uploads by design; they were fixed by syncing local `apps/web/public/uploads` into `/home/deploy/prostor-uploads` separately.
 - When local changes touch uploaded files, the production deploy checklist must include an extra media sync step after code deploy.
 - Same issue repeated for new category images on 2026-05-06: local files existed in `apps/web/public/uploads/categories`, but production `/home/deploy/prostor-uploads/categories` was empty. Fix was a separate sync of those files to the VPS uploads dir.
 - AI specs endpoint uses Responses API (`/v1/responses`) with `web_search_preview` tool for factual data.
 - `infra/ai-proxy/server.py` supports configurable upstream URLs; its real `proxy.env` must stay outside git.
+- Current production AI path is expected to use the external supported-region proxy `http://170.168.33.63:3100`; direct OpenAI from the main VPS is not the intended production route.
+- Prod AI outage root cause on 2026-05-07 was missing `OPENAI_PROXY_URL` and `OPENAI_PROXY_SECRET` in `/home/deploy/ProstorShop/.env`, which made authenticated `/api/ai/specs` return `500 {"error":"OPENAI_API_KEY not configured"}` until env was restored.
+- Post-fix live validation on 2026-05-07: authenticated `/api/ai/seo` returned HTTP `200` with generated JSON; `/api/ai/specs` no longer failed on transport/config and instead returned a normal app-level response for the tested product prompt.
 - Root SSH access on the main VPS accepts `~/.ssh/prostor_tradein_bot_ed25519_nopass` for passwordless deploys. The same key is currently not accepted for the `deploy` user, so maintenance should use `root@88.218.64.61` unless server access is adjusted.
 - Telegram post publishing is plain-text now; shared formatting lives in `apps/web/lib/telegram-post-template.ts`. Premium/custom emoji HTML formatting was intentionally removed.
 - `/admin/products` now supports server-side `category` and `status` filters with pagination preserving active params.
@@ -231,6 +237,7 @@ infra/
 - Production build nuance verified 2026-05-06: before `corepack pnpm --filter @prostor/web build:prod`, export the root env in shell with `set -a && . ./.env && set +a`, otherwise `scripts/assert-public-env.mjs` will not see `NEXT_PUBLIC_SITE_URL`.
 - Prisma deploy nuance verified 2026-05-06: the release must also provide `packages/db/.env` or equivalent `DATABASE_URL`/`DIRECT_URL` values for `prisma db push`; relying only on root `.env` was not enough in the isolated release dir.
 - Prisma schema nuance verified 2026-05-06: keep the `LegacyUserAvatar` mapping in `packages/db/prisma/schema.prisma` until the old `UserAvatar` table is migrated or intentionally removed, otherwise production `db push` stops on destructive data-loss warning.
+- Production env nuance verified 2026-05-07: after deploy or hotfix, explicitly verify `/home/deploy/ProstorShop/.env` still contains `OPENAI_PROXY_URL=http://170.168.33.63:3100` and `OPENAI_PROXY_SECRET=...`; this config was lost once and immediately broke prod AI.
 - Local validation status at session close: `corepack pnpm typecheck`, `corepack pnpm test`, and `corepack pnpm --filter @prostor/web build` all pass on commit `8cb0c27`.
 - Remaining non-blocking issue at session close: Telegram Mini App / hydration warnings still appear in local browser validation, but they did not break the deployed release or public health checks.
 
@@ -240,8 +247,9 @@ infra/
 2. Investigate and clean up the remaining Telegram Mini App / hydration warnings seen in local browser validation, especially around `telegram-mini-app-bootstrap.tsx` and client/server markup differences.
 3. Populate homepage sections via `/admin/marketing/homepage` if storefront merchandising is still incomplete.
 4. If media changed locally in a future session, sync `apps/web/public/uploads` or `apps/web/public/uploads/categories` separately to `/home/deploy/prostor-uploads/...`; `deploy:pack` still excludes uploads by design.
-5. Convert schema changes into proper Prisma migrations before the next structural DB update.
-6. Verify Telegram posting end-to-end with the current bot token and target channel permissions.
+5. After the next deploy, run a quick prod AI smoke check against `/api/ai/seo` or `/api/ai/specs` under an authenticated admin session to catch missing proxy env immediately.
+6. Convert schema changes into proper Prisma migrations before the next structural DB update.
+7. Verify Telegram posting end-to-end with the current bot token and target channel permissions.
 
 ## Build Order
 

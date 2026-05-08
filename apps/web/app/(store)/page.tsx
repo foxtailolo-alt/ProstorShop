@@ -228,23 +228,6 @@ export default async function StorefrontPage() {
         </section>
       )}
 
-      {/* Advantages */}
-      <section className="store-section">
-        <div className="grid grid-4">
-          {[
-            { icon: "🚀", title: "Быстрая доставка", text: "По Москве за 2 часа, по России от 1 дня" },
-            { icon: "🛡️", title: "Гарантия", text: "Официальная гарантия на всю технику" },
-            { icon: "💰", title: "Trade-in", text: "Сдайте старое устройство и получите скидку" },
-            { icon: "🔧", title: "Сервис", text: "Ремонт любой сложности с прозрачными ценами" },
-          ].map((item, i) => (
-            <div key={item.title} className={`advantage-card glass animate-fade-up delay-${i + 1}`}>
-              <span className="advantage-icon">{item.icon}</span>
-              <strong>{item.title}</strong>
-              <p>{item.text}</p>
-            </div>
-          ))}
-        </div>
-      </section>
     </main>
   );
 }

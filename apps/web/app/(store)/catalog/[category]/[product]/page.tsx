@@ -94,7 +94,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     loadCategoryTree(),
   ]);
 
-  const categoryPath = getCategoryPath(tree, currentProduct.categorySlug);
+  const categoryPath = getCategoryPath(tree, currentProduct.categorySlug).slice(-3);
   const categoryNode = findNodeBySlug(tree, currentProduct.categorySlug);
   const resolvedCategory = categoryNode
     ? { slug: categoryNode.slug, name: categoryNode.name }

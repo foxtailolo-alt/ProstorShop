@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { StoreNav } from "../../../../components/layout/store-nav";
 import { ProductCardMedia } from "../../../../components/product/product-card-media";
 import { BannerCarousel } from "../../../../components/store/banner-carousel";
@@ -37,6 +37,15 @@ const WAITLIST_CATEGORY_SLUGS = new Set([
   "trade-in-ustroystva-trade-in-noutbuki",
 ]);
 
+const LEGACY_CATEGORY_REDIRECTS: Record<string, string> = {
+  apple: "novye-ustroystva-apple",
+  samsung: "novye-ustroystva-samsung",
+  iphone: "novye-ustroystva-apple-iphone",
+  ipad: "novye-ustroystva-apple-ipad",
+  macbook: "novye-ustroystva-apple-macbook",
+  accessories: "novye-ustroystva-apple-aksessuary",
+};
+
 function countTreeProducts(node: CategoryTreeNode): number {
   return node.productCount + node.children.reduce((sum, child) => sum + countTreeProducts(child), 0);
 }
@@ -49,7 +58,8 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
   const { category } = await params;
   const tree = await loadCategoryTree();
-  const node = findNodeBySlug(tree, category);
+  const node = findNodeBySlug(tree, category)
+    ?? (LEGACY_CATEGORY_REDIRECTS[category] ? findNodeBySlug(tree, LEGACY_CATEGORY_REDIRECTS[category]) : null);
 
   if (!node) {
     return {};
@@ -80,10 +90,17 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
   const node = findNodeBySlug(tree, category);
 
   if (!node) {
+    const legacyCategorySlug = LEGACY_CATEGORY_REDIRECTS[category];
+
+    if (legacyCategorySlug && findNodeBySlug(tree, legacyCategorySlug)) {
+      redirect(`/catalog/${legacyCategorySlug}`);
+    }
+
     notFound();
   }
 
-  const ancestors = getCategoryPath(tree, category).slice(0, -1);
+  const breadcrumbPath = getCategoryPath(tree, node.slug).slice(-3);
+  const ancestors = breadcrumbPath.slice(0, -1);
   const isLeaf = node.children.length === 0;
   const showWaitlistCta = isLeaf && WAITLIST_CATEGORY_SLUGS.has(node.slug);
 

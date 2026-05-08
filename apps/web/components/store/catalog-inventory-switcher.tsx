@@ -53,6 +53,7 @@ export function CatalogInventorySwitcher({ tree }: CatalogInventorySwitcherProps
 
     return tabs[0]?.id ?? "new";
   });
+  const [hoveredCategorySlug, setHoveredCategorySlug] = useState<string | null>(null);
   const touchStartXRef = useRef(0);
   const touchStartYRef = useRef(0);
 
@@ -128,25 +129,38 @@ export function CatalogInventorySwitcher({ tree }: CatalogInventorySwitcherProps
             const totalProducts = countTreeProducts(category);
 
             return (
-              <Link
+              <article
                 key={category.slug}
-                href={`/catalog/${category.slug}`}
                 className={`category-card glass animate-fade-up delay-${Math.min(index + 1, 8)}`}
+                onMouseEnter={() => setHoveredCategorySlug(category.slug)}
+                onMouseLeave={() => setHoveredCategorySlug((currentSlug) => currentSlug === category.slug ? null : currentSlug)}
               >
-                {category.imageUrl ? (
-                  <div className="category-card-media">
-                    <img src={category.imageUrl} alt={category.name} className="category-card-image" loading="lazy" />
+                <Link href={`/catalog/${category.slug}`} className="category-card-link">
+                  {category.imageUrl ? (
+                    <div className="category-card-media">
+                      <img src={category.imageUrl} alt={category.name} className="category-card-image" loading="lazy" />
+                    </div>
+                  ) : (
+                    <span className="category-card-icon">📦</span>
+                  )}
+                  <span className="category-card-name">{category.name}</span>
+                  <span className="category-card-count">
+                    {category.children.length > 0
+                      ? `${category.children.length} подкатегорий`
+                      : `${totalProducts} товаров`}
+                  </span>
+                </Link>
+
+                {category.children.length > 0 && hoveredCategorySlug === category.slug ? (
+                  <div className="category-card-subcategories">
+                    {category.children.map((child) => (
+                      <Link key={child.id} href={`/catalog/${child.slug}`} className="category-card-subcategory-link">
+                        {child.name}
+                      </Link>
+                    ))}
                   </div>
-                ) : (
-                  <span className="category-card-icon">📦</span>
-                )}
-                <span className="category-card-name">{category.name}</span>
-                <span className="category-card-count">
-                  {category.children.length > 0
-                    ? `${category.children.length} подкатегорий`
-                    : `${totalProducts} товаров`}
-                </span>
-              </Link>
+                ) : null}
+              </article>
             );
           })}
         </div>

@@ -53,6 +53,12 @@ export type ParsedServiceCatalogWorkbook = {
   records: ServiceCatalogImportRecord[];
 };
 
+export type NormalizedServiceCatalogModel = {
+  modelName: string;
+  modelSlug: string;
+  modelSortOrder: number;
+};
+
 const BATTERY_BLOCKS: SheetBlock[] = [
   {
     nameColumn: 0,
@@ -259,6 +265,72 @@ function modelSortOrder(modelName: string) {
   return 1_000 - modelName.length;
 }
 
+function inferSharedModelPrefix(modelName: string) {
+  const tokens = modelName.trim().split(/\s+/).filter(Boolean);
+  const prefixTokens: string[] = [];
+
+  for (const token of tokens) {
+    if (/^\d/.test(token) || /^[a-z]\d/i.test(token) || /^m\d/i.test(token)) {
+      break;
+    }
+
+    prefixTokens.push(token);
+  }
+
+  return prefixTokens.join(" ").trim();
+}
+
+export function normalizeServiceCatalogModelNames(modelName: string): NormalizedServiceCatalogModel[] {
+  const normalizedModelName = modelName.trim().replace(/\s+/g, " ");
+
+  if (!normalizedModelName.includes("/")) {
+    return [{
+      modelName: normalizedModelName,
+      modelSlug: slugify(normalizedModelName),
+      modelSortOrder: modelSortOrder(normalizedModelName),
+    }];
+  }
+
+  const parts = normalizedModelName.split("/").map((part) => part.trim()).filter(Boolean);
+  if (parts.length <= 1) {
+    return [{
+      modelName: normalizedModelName,
+      modelSlug: slugify(normalizedModelName),
+      modelSortOrder: modelSortOrder(normalizedModelName),
+    }];
+  }
+
+  const sharedPrefix = inferSharedModelPrefix(parts[0] ?? normalizedModelName);
+  const seen = new Set<string>();
+  const normalizedModels: NormalizedServiceCatalogModel[] = [];
+
+  for (const [index, part] of parts.entries()) {
+    const resolvedName = index === 0 || !sharedPrefix || part.toLowerCase().startsWith(sharedPrefix.toLowerCase())
+      ? part
+      : `${sharedPrefix} ${part}`;
+    const compactName = resolvedName.trim().replace(/\s+/g, " ");
+
+    if (!compactName || seen.has(compactName)) {
+      continue;
+    }
+
+    seen.add(compactName);
+    normalizedModels.push({
+      modelName: compactName,
+      modelSlug: slugify(compactName),
+      modelSortOrder: modelSortOrder(compactName),
+    });
+  }
+
+  return normalizedModels.length > 0
+    ? normalizedModels
+    : [{
+        modelName: normalizedModelName,
+        modelSlug: slugify(normalizedModelName),
+        modelSortOrder: modelSortOrder(normalizedModelName),
+      }];
+}
+
 function toNumeric(value: unknown) {
   if (value === "" || value === null || value === undefined || value === "-") {
     return null;
@@ -273,26 +345,26 @@ function toWorkbook(buffer: Buffer) {
   return XLSX.read(buffer, { type: "buffer" });
 }
 
-function buildImportRecord(
+function buildImportRecords(
   block: SheetBlock,
   rawName: string,
   partPrice: number,
   laborPrice: number,
   totalPrice: number,
   sourceFile: string,
-): ServiceCatalogImportRecord {
-  const modelName = block.serviceSlug === "battery-replacement" ? extractBatteryModel(rawName) : extractCoverModel(rawName);
+): ServiceCatalogImportRecord[] {
+  const rawModelName = block.serviceSlug === "battery-replacement" ? extractBatteryModel(rawName) : extractCoverModel(rawName);
   const colors = Array.from(rawName.matchAll(/\(([^)]+)\)/g))
     .map((match) => match[1]?.trim() ?? "")
     .filter(Boolean)
     .filter(isUserVisibleColorTag);
 
-  return {
+  return normalizeServiceCatalogModelNames(rawModelName).map(({ modelName, modelSlug, modelSortOrder: normalizedModelSortOrder }) => ({
     serviceSlug: block.serviceSlug,
     serviceName: block.serviceName,
     serviceDescription: block.serviceDescription,
     modelName,
-    modelSlug: slugify(modelName),
+    modelSlug,
     brand: inferBrand(modelName),
     variantName: block.variantName,
     variantSlug: slugify(block.variantName),
@@ -306,9 +378,9 @@ function buildImportRecord(
     sourceFile,
     sourceLabel: rawName,
     serviceSortOrder: block.serviceSlug === "battery-replacement" ? 10 : 20,
-    modelSortOrder: modelSortOrder(modelName),
+    modelSortOrder: normalizedModelSortOrder,
     variantSortOrder: block.sortOrder,
-  };
+  }));
 }
 
 export function parseServiceCatalogWorkbook(buffer: Buffer, sourceFile: string): ParsedServiceCatalogWorkbook {
@@ -353,35 +425,36 @@ export function parseServiceCatalogWorkbook(buffer: Buffer, sourceFile: string):
           continue;
         }
 
-        const record = buildImportRecord(block, rawName, partPrice, laborPrice, totalPrice, sourceFile);
-        const signature = `${record.serviceSlug}::${record.modelSlug}::${record.variantSlug}`;
-        const existing = records.get(signature);
+        for (const record of buildImportRecords(block, rawName, partPrice, laborPrice, totalPrice, sourceFile)) {
+          const signature = `${record.serviceSlug}::${record.modelSlug}::${record.variantSlug}`;
+          const existing = records.get(signature);
 
-        if (!existing) {
-          records.set(signature, record);
-          continue;
-        }
+          if (!existing) {
+            records.set(signature, record);
+            continue;
+          }
 
-        if (
-          existing.totalPrice !== record.totalPrice ||
-          existing.partPrice !== record.partPrice ||
-          existing.laborPrice !== record.laborPrice
-        ) {
-          warnings.push(
-            `Найдено несколько цен для ${record.serviceName} / ${record.modelName} / ${record.variantName}. Оставлена первая строка: "${existing.sourceLabel}".`,
-          );
-          continue;
-        }
+          if (
+            existing.totalPrice !== record.totalPrice ||
+            existing.partPrice !== record.partPrice ||
+            existing.laborPrice !== record.laborPrice
+          ) {
+            warnings.push(
+              `Найдено несколько цен для ${record.serviceName} / ${record.modelName} / ${record.variantName}. Оставлена первая строка: "${existing.sourceLabel}".`,
+            );
+            continue;
+          }
 
-        existing.sourceKinds = Array.from(new Set([...existing.sourceKinds, ...record.sourceKinds]));
+          existing.sourceKinds = Array.from(new Set([...existing.sourceKinds, ...record.sourceKinds]));
 
-        const currentColors = Array.isArray(existing.metadata.colors) ? (existing.metadata.colors as string[]) : [];
-        const nextColors = Array.isArray(record.metadata.colors) ? (record.metadata.colors as string[]) : [];
-        if (currentColors.length > 0 || nextColors.length > 0) {
-          existing.metadata = {
-            ...existing.metadata,
-            colors: Array.from(new Set([...currentColors, ...nextColors])).sort(),
-          };
+          const currentColors = Array.isArray(existing.metadata.colors) ? (existing.metadata.colors as string[]) : [];
+          const nextColors = Array.isArray(record.metadata.colors) ? (record.metadata.colors as string[]) : [];
+          if (currentColors.length > 0 || nextColors.length > 0) {
+            existing.metadata = {
+              ...existing.metadata,
+              colors: Array.from(new Set([...currentColors, ...nextColors])).sort(),
+            };
+          }
         }
       }
     }

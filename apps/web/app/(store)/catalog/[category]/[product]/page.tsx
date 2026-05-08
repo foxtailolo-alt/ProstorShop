@@ -209,8 +209,8 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
             )}
 
             <div className="product-page-highlights">
-              {currentProduct.highlights.map((item) => (
-                <span key={item} className="product-highlight-tag">{item}</span>
+              {currentProduct.highlights.map((item, index) => (
+                <span key={`${item}-${index}`} className="product-highlight-tag">{item}</span>
               ))}
             </div>
           </div>

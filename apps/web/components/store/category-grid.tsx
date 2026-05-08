@@ -31,18 +31,18 @@ export function CategoryGrid({ categories }: { categories: CategoryNode[] }) {
               onMouseLeave={() => setHoveredSlug(null)}
             >
               <Link href={`/catalog/${cat.slug}`} className="catgrid-link">
-                {cat.imageUrl ? (
-                  <img src={cat.imageUrl} alt={cat.name} className="catgrid-img" loading="lazy" />
-                ) : (
-                  <div className="catgrid-img-placeholder" />
-                )}
+                <div className="catgrid-media">
+                  {cat.imageUrl ? (
+                    <img src={cat.imageUrl} alt={cat.name} className="catgrid-img" loading="lazy" />
+                  ) : (
+                    <div className="catgrid-img-placeholder" />
+                  )}
+                </div>
                 <div className="catgrid-info">
                   <span className="catgrid-name">{cat.name}</span>
-                  <span className="catgrid-count">{cat.productCount} товаров</span>
                 </div>
               </Link>
 
-              {/* Hover subcategories */}
               {cat.children.length > 0 && hoveredSlug === cat.slug && (
                 <div className="catgrid-sub">
                   {cat.children.map((sub) => (

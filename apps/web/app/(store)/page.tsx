@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@prostor/db";
+import { AddToCartButton } from "../../components/cart/add-to-cart-button";
 import { StoreNav } from "../../components/layout/store-nav";
 import { ProductCardMedia } from "../../components/product/product-card-media";
 import { BannerCarousel } from "../../components/store/banner-carousel";
@@ -15,13 +16,11 @@ import {
   loadCategoryTree,
   loadHomepageSections,
 } from "../../lib/data/catalog";
-import { findUsedInventoryCandidates } from "../../lib/upgrade-suggestions";
+import { buildUpgradeSuggestions } from "../../lib/upgrade-suggestions";
 import { addToCartAction } from "./cart/actions";
 
-async function addToCartFormAction(formData: FormData) {
-  "use server";
-
-  await addToCartAction(formData);
+function getDeviceTitle(device: { nickname: string | null; brand: string; model: string }) {
+  return device.nickname?.trim() || `${device.brand} ${device.model}`;
 }
 
 export default async function StorefrontPage() {
@@ -52,9 +51,9 @@ export default async function StorefrontPage() {
       })
     : [];
 
-  const usedStockBanner = userDevices
+  const devicesWithOffers = userDevices
     .map((device) => {
-      const candidates = findUsedInventoryCandidates(
+      const suggestions = buildUpgradeSuggestions(
         {
           categoryCode: device.categoryCode,
           brand: device.brand,
@@ -66,41 +65,42 @@ export default async function StorefrontPage() {
         categoryTree,
       );
 
-      if (candidates.length === 0) {
+      if (suggestions.length === 0) {
         return null;
       }
 
       return {
-        deviceTitle: device.nickname?.trim() || `${device.brand} ${device.model}`,
-        candidates,
+        deviceTitle: getDeviceTitle(device),
+        suggestions,
       };
     })
-    .find(Boolean) ?? null;
+    .filter((device): device is { deviceTitle: string; suggestions: ReturnType<typeof buildUpgradeSuggestions> } => Boolean(device));
+  const firstDeviceWithOffers = devicesWithOffers[0] ?? null;
+  const totalPersonalOfferCount = devicesWithOffers.reduce((sum, device) => sum + device.suggestions.length, 0);
+  const personalOffersTitle = devicesWithOffers.length > 1
+    ? "Для ваших устройств уже есть подходящие варианты"
+    : firstDeviceWithOffers
+      ? `Для ${firstDeviceWithOffers.deviceTitle} уже есть подходящие варианты`
+      : null;
 
   return (
     <main className="page shell">
       <StoreNav />
 
-      {usedStockBanner ? (
+      {devicesWithOffers.length > 0 && personalOffersTitle ? (
         <section className="store-section animate-fade-up">
           <div className="used-stock-banner glass">
             <div className="used-stock-banner-copy">
               <div className="section-label">Ваше персональное предложение</div>
               <h2 className="store-section-title" style={{ marginBottom: 8 }}>
-                Под {usedStockBanner.deviceTitle} уже есть подходящие trade-in позиции
+                {personalOffersTitle}
               </h2>
               <p className="store-page-subtitle" style={{ marginBottom: 0 }}>
-                В каталоге сейчас доступно {usedStockBanner.candidates.length} релевантных варианта. Можно сразу открыть профиль или перейти в карточку товара.
+                В персональных предложениях уже доступно {totalPersonalOfferCount} релевантных вариантов: новые и trade-in позиции.
               </p>
             </div>
             <div className="used-stock-banner-actions">
-              <Link className="button button-primary" href="/profile">Открыть профиль</Link>
-              <Link
-                className="button button-secondary"
-                href={`/catalog/${usedStockBanner.candidates[0]?.categorySlug}/${usedStockBanner.candidates[0]?.slug}`}
-              >
-                Смотреть вариант
-              </Link>
+              <Link className="button button-primary" href="/profile?tab=offers">Смотреть варианты</Link>
             </div>
           </div>
         </section>
@@ -121,7 +121,7 @@ export default async function StorefrontPage() {
               key={section.id}
               title={section.title}
               items={section.items}
-              addToCartAction={addToCartFormAction}
+              addToCartAction={addToCartAction}
             />
           );
         }
@@ -171,12 +171,15 @@ export default async function StorefrontPage() {
                           </Link>
                         </div>
                       ) : (
-                        <form action={addToCartFormAction} className="product-card-actions">
-                          <input type="hidden" name="productSlug" value={p.slug} />
-                          <input type="hidden" name="quantity" value="1" />
-                          <input type="hidden" name="redirectTo" value="/" />
-                          <button className="button button-primary button-sm" type="submit">В корзину</button>
-                        </form>
+                        <div className="product-card-actions">
+                          <AddToCartButton
+                            addToCartAction={addToCartAction}
+                            productSlug={p.slug}
+                            productName={p.name}
+                            className="button button-primary button-sm"
+                            label="В корзину"
+                          />
+                        </div>
                       )}
                     </div>
                   </article>

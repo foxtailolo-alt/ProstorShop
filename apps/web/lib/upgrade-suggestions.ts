@@ -36,6 +36,28 @@ export type UsedInventoryCandidate = {
   price: number;
 };
 
+const LEGACY_CATEGORY_CODE_TO_FAMILY: Record<string, DeviceFamily> = {
+  iphone: "iphone",
+  smartphone: "iphone",
+  phone: "iphone",
+  samsung: "samsung",
+  android: "samsung",
+  ipad: "ipad",
+  tablet: "ipad",
+  mac: "mac",
+  macbook: "mac",
+  notebook: "mac",
+  laptop: "mac",
+  apple_watch: "apple_watch",
+  watch: "apple_watch",
+  smart_watch: "apple_watch",
+  smartwatch: "apple_watch",
+};
+
+function normalizeCategoryCode(value: string) {
+  return value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
 export function normalizeText(value: string) {
   return value.toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-я0-9+\s]/gi, " ").replace(/\s+/g, " ").trim();
 }
@@ -71,20 +93,7 @@ function detectInventoryKind(product: CatalogProduct, categoryTree: CategoryTree
 }
 
 export function getCategoryCodeFamily(categoryCode: string): DeviceFamily | null {
-  switch (categoryCode) {
-    case "iphone":
-      return "iphone";
-    case "samsung":
-      return "samsung";
-    case "ipad":
-      return "ipad";
-    case "mac":
-      return "mac";
-    case "apple_watch":
-      return "apple_watch";
-    default:
-      return null;
-  }
+  return LEGACY_CATEGORY_CODE_TO_FAMILY[normalizeCategoryCode(categoryCode)] ?? null;
 }
 
 export function inferDeviceFamilyFromProductText(name: string, brand: string) {
@@ -162,11 +171,56 @@ function extractMacRank(value: string) {
 }
 
 function extractWatchRank(value: string) {
+  const parsedWatchSeries = parseWatchSeries(value);
+  if (!parsedWatchSeries) {
+    return 0;
+  }
+
+  const familyBase = parsedWatchSeries.line === "ultra" ? 3000 : parsedWatchSeries.line === "se" ? 1000 : 2000;
+  return familyBase + parsedWatchSeries.generation * 100 + parsedWatchSeries.size;
+}
+
+function parseWatchSeries(value: string) {
   const normalized = normalizeText(value);
-  const familyBase = normalized.includes("ultra") ? 800 : normalized.includes("se") ? 300 : 500;
-  const series = Number(normalized.match(/(?:s|se|ultra)\s*(\d{1,2})/)?.[1] ?? 0);
   const size = Number(normalized.match(/\b(40|41|42|44|45|46|49)\b/)?.[1] ?? 0);
-  return familyBase + series * 10 + size;
+
+  const ultraMatch = normalized.match(/\bultra\s*(\d{1,2})\b/);
+  if (ultraMatch) {
+    return {
+      line: "ultra" as const,
+      generation: Number(ultraMatch[1] ?? 0),
+      size,
+    };
+  }
+
+  const seMatch = normalized.match(/\bse\s*(\d{1,2})\b/);
+  if (seMatch) {
+    return {
+      line: "se" as const,
+      generation: Number(seMatch[1] ?? 0),
+      size,
+    };
+  }
+
+  const seriesMatch = normalized.match(/\b(?:series|s)\s*(\d{1,2})\b/);
+  if (!seriesMatch) {
+    return null;
+  }
+
+  return {
+    line: "series" as const,
+    generation: Number(seriesMatch[1] ?? 0),
+    size,
+  };
+}
+
+function getWatchSeriesToken(value: string) {
+  const parsedWatchSeries = parseWatchSeries(value);
+  if (!parsedWatchSeries) {
+    return null;
+  }
+
+  return `${parsedWatchSeries.line}:${parsedWatchSeries.generation}`;
 }
 
 export function getModelRank(family: DeviceFamily | null, value: string) {
@@ -201,6 +255,87 @@ export function buildCurrentDeviceRankLabel(family: DeviceFamily, device: Pick<U
   }
 }
 
+function prioritizeNewUpgradeSuggestions(family: DeviceFamily, suggestions: UpgradeSuggestion[]) {
+  if (family === "apple_watch") {
+    const preferredVariantMatchers = [
+      (product: UpgradeSuggestion) => {
+        const normalized = normalizeText(product.name);
+        return normalized.includes("apple watch s11") || normalized.includes("apple watch series 11");
+      },
+      (product: UpgradeSuggestion) => {
+        const normalized = normalizeText(product.name);
+        return normalized.includes("apple watch ultra");
+      },
+    ];
+
+    const selected = new Map<string, UpgradeSuggestion>();
+
+    for (const matchesPreferredVariant of preferredVariantMatchers) {
+      const match = suggestions.find((product) => !selected.has(product.slug) && matchesPreferredVariant(product));
+
+      if (match) {
+        selected.set(match.slug, match);
+      }
+    }
+
+    for (const suggestion of suggestions) {
+      if (selected.size >= 3) {
+        break;
+      }
+
+      if (!selected.has(suggestion.slug)) {
+        selected.set(suggestion.slug, suggestion);
+      }
+    }
+
+    return Array.from(selected.values());
+  }
+
+  if (family !== "iphone") {
+    return suggestions.slice(0, 3);
+  }
+
+  const preferredVariantMatchers = [
+    (product: UpgradeSuggestion) => {
+      const normalized = normalizeText(product.name);
+      return normalized.includes("iphone 17") && normalized.includes("pro max");
+    },
+    (product: UpgradeSuggestion) => {
+      const normalized = normalizeText(product.name);
+      return normalized.includes("iphone 17") && normalized.includes("pro") && !normalized.includes("pro max");
+    },
+    (product: UpgradeSuggestion) => {
+      const normalized = normalizeText(product.name);
+      return normalized.includes("iphone 17")
+        && !normalized.includes("pro")
+        && !normalized.includes("plus")
+        && !normalized.includes("air");
+    },
+  ];
+
+  const selected = new Map<string, UpgradeSuggestion>();
+
+  for (const matchesPreferredVariant of preferredVariantMatchers) {
+    const match = suggestions.find((product) => !selected.has(product.slug) && matchesPreferredVariant(product));
+
+    if (match) {
+      selected.set(match.slug, match);
+    }
+  }
+
+  for (const suggestion of suggestions) {
+    if (selected.size >= 3) {
+      break;
+    }
+
+    if (!selected.has(suggestion.slug)) {
+      selected.set(suggestion.slug, suggestion);
+    }
+  }
+
+  return Array.from(selected.values());
+}
+
 export function buildUpgradeSuggestions(
   device: UserDeviceSuggestionInput,
   products: CatalogProduct[],
@@ -213,10 +348,18 @@ export function buildUpgradeSuggestions(
 
   const currentRank = getModelRank(family, buildCurrentDeviceRankLabel(family, device));
   const currentStorage = extractStorageValue(device.storage);
+  const currentWatchSeriesToken = family === "apple_watch" ? getWatchSeriesToken(device.model) : null;
 
   const matchingProducts = products
     .filter((product) => product.inStock)
     .filter((product) => getProductFamily(product) === family)
+    .filter((product) => {
+      if (family !== "apple_watch" || !currentWatchSeriesToken) {
+        return true;
+      }
+
+      return getWatchSeriesToken(product.name) !== currentWatchSeriesToken;
+    })
     .filter((product) => getModelRank(family, product.name) > currentRank)
     .map((product) => {
       const productImageUrls = product.imageUrls ?? [];
@@ -268,10 +411,13 @@ export function buildUpgradeSuggestions(
   }
 
   const distinctProducts = Array.from(distinctBySlug.values());
-  const newProducts = distinctProducts.filter((product) => product.inventoryKind === "new").slice(0, 3);
-  const tradeInProducts = distinctProducts.filter((product) => product.inventoryKind === "trade-in").slice(0, 3);
+  const newProducts = prioritizeNewUpgradeSuggestions(
+    family,
+    distinctProducts.filter((product) => product.inventoryKind === "new"),
+  );
+  const tradeInProducts = distinctProducts.filter((product) => product.inventoryKind === "trade-in");
 
-  return [...newProducts, ...tradeInProducts].slice(0, 6);
+  return [...newProducts, ...tradeInProducts];
 }
 
 export function findUsedInventoryCandidates(

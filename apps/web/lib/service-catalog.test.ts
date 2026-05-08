@@ -19,6 +19,17 @@ function buildWorkbookBuffer() {
       2000,
       4100,
     ],
+    [
+      "Аккумулятор iPhone 12 / 12 Pro Оригинал",
+      3500,
+      2000,
+      5200,
+      "",
+      "Аккумулятор iPhone 12 / 12 Pro Premium Clean 100%",
+      2200,
+      1800,
+      3900,
+    ],
   ];
 
   const coverRows = [
@@ -52,8 +63,8 @@ describe("service catalog import", () => {
   it("normalizes RepairProstorBot Excel sheets into service catalog records", () => {
     const parsed = parseServiceCatalogWorkbook(buildWorkbookBuffer(), "Ремонт.xlsx");
 
-    expect(parsed.rowsRead).toBe(4);
-    expect(parsed.normalizedRows).toBe(4);
+    expect(parsed.rowsRead).toBe(6);
+    expect(parsed.normalizedRows).toBe(8);
     expect(parsed.warnings).toEqual([]);
 
     expect(parsed.records).toEqual(
@@ -86,6 +97,34 @@ describe("service catalog import", () => {
           serviceSlug: "back-cover-replacement",
           variantName: "Оригинал",
           totalPrice: 8000,
+        }),
+        expect.objectContaining({
+          brand: "Apple",
+          modelName: "iPhone 12",
+          serviceSlug: "battery-replacement",
+          variantName: "Оригинал",
+          totalPrice: 5500,
+        }),
+        expect.objectContaining({
+          brand: "Apple",
+          modelName: "iPhone 12 Pro",
+          serviceSlug: "battery-replacement",
+          variantName: "Оригинал",
+          totalPrice: 5500,
+        }),
+        expect.objectContaining({
+          brand: "Apple",
+          modelName: "iPhone 12",
+          serviceSlug: "battery-replacement",
+          variantName: "Премиум копия",
+          totalPrice: 4000,
+        }),
+        expect.objectContaining({
+          brand: "Apple",
+          modelName: "iPhone 12 Pro",
+          serviceSlug: "battery-replacement",
+          variantName: "Премиум копия",
+          totalPrice: 4000,
         }),
       ]),
     );

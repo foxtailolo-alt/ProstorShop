@@ -6,6 +6,7 @@ import { TelegramLoginWidget } from "../../../components/auth/telegram-login-wid
 import { PhoneLoginCard } from "../../../components/auth/phone-login-card";
 import { formatOrderNumber } from "../../../lib/order-number";
 import { getCurrentUserProfile } from "../../../lib/profile";
+import { getCategoryCodeFamily } from "../../../lib/upgrade-suggestions";
 import { addPurchasedProfileDeviceAction, removeProfileDeviceAction } from "./actions";
 import { deleteUsedDeviceWaitlistEntryAction, openProfileNotificationAction } from "../waitlist/actions";
 
@@ -19,10 +20,16 @@ const statusLabels: Record<string, string> = {
 
 const deviceCategoryLabels: Record<string, string> = {
   iphone: "iPhone",
+  smartphone: "iPhone",
   mac: "Mac",
+  macbook: "Mac",
+  notebook: "Mac",
   samsung: "Samsung",
   ipad: "iPad",
+  tablet: "iPad",
   apple_watch: "Apple Watch",
+  watch: "Apple Watch",
+  smart_watch: "Apple Watch",
 };
 
 const waitlistStatusLabels: Record<string, string> = {
@@ -62,8 +69,41 @@ type ProfilePageProps = {
     deviceRemoved?: string;
     waitlistAdded?: string;
     tab?: string;
+    expandedOfferDevice?: string;
   }>;
 };
+
+type ProfileUserDevice = NonNullable<Awaited<ReturnType<typeof getCurrentUserProfile>>>["userDevices"][number];
+
+function getOfferPreview<T extends { inventoryKind: "new" | "trade-in" }>(suggestions: T[]) {
+  const preview: T[] = [];
+  const firstNew = suggestions.find((product) => product.inventoryKind === "new");
+  const firstTradeIn = suggestions.find((product) => product.inventoryKind === "trade-in");
+
+  if (firstNew) {
+    preview.push(firstNew);
+  }
+
+  if (firstTradeIn && firstTradeIn !== firstNew) {
+    preview.push(firstTradeIn);
+  }
+
+  if (preview.length < 2) {
+    for (const suggestion of suggestions) {
+      if (preview.includes(suggestion)) {
+        continue;
+      }
+
+      preview.push(suggestion);
+
+      if (preview.length === 2) {
+        break;
+      }
+    }
+  }
+
+  return preview;
+}
 
 export default async function ProfilePage({ searchParams }: ProfilePageProps) {
   const profile = await getCurrentUserProfile();
@@ -71,10 +111,35 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
   const deviceAdded = resolvedSearchParams?.deviceAdded === "1";
   const deviceRemoved = resolvedSearchParams?.deviceRemoved === "1";
   const waitlistAdded = resolvedSearchParams?.waitlistAdded === "1";
+  const expandedOfferDeviceId = resolvedSearchParams?.expandedOfferDevice ?? null;
   const activeTab: ProfileTab = isProfileTab(resolvedSearchParams?.tab) ? resolvedSearchParams.tab : "overview";
   const displayName = [profile?.firstName, profile?.lastName].filter(Boolean).join(" ") || profile?.username || "Пользователь";
   const displayPhone = profile?.phone || profile?.orders.find((order) => order.phone)?.phone || "Добавится после первого заказа";
   const canOpenAdmin = Boolean(profile?.roles.some((role) => role !== "customer"));
+  const devicesWithOffers = profile?.userDevices.filter((device) => device.upgradeSuggestions.length > 0) ?? [];
+  const firstDeviceWithOffers = devicesWithOffers[0] ?? null;
+  const totalOfferCount = devicesWithOffers.reduce((sum, device) => sum + device.upgradeSuggestions.length, 0);
+  const aggregatedOfferLabel = devicesWithOffers.length > 1
+    ? "Для ваших устройств уже есть подходящие варианты."
+    : firstDeviceWithOffers
+      ? `Для ${getDeviceTitle(firstDeviceWithOffers)} уже есть подходящие варианты.`
+      : "Персональные предложения появятся, когда в каталоге будут подходящие варианты.";
+  const aggregatedOfferCountLabel = totalOfferCount === 1
+    ? "1 релевантное предложение"
+    : `${totalOfferCount.toLocaleString("ru-RU")} релевантных предложений`;
+
+  function getVisibleOfferSuggestions(device: ProfileUserDevice) {
+    return expandedOfferDeviceId === device.id ? device.upgradeSuggestions : getOfferPreview(device.upgradeSuggestions);
+  }
+
+  function getOfferDeviceHref(deviceId: string | null) {
+    return deviceId ? `/profile?tab=offers&expandedOfferDevice=${deviceId}` : "/profile?tab=offers";
+  }
+
+  function getOfferDeviceCategoryLabel(device: ProfileUserDevice) {
+    const normalizedCategoryCode = getCategoryCodeFamily(device.categoryCode) ?? device.categoryCode;
+    return deviceCategoryLabels[normalizedCategoryCode] ?? deviceCategoryLabels[device.categoryCode] ?? device.categoryCode;
+  }
 
   return (
     <main className="page shell">
@@ -267,7 +332,7 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
                             Добавьте их в «Мои устройства», чтобы они участвовали в персональных предложениях и апгрейдах.
                           </div>
                         </div>
-                        <Link className="button button-primary button-sm" href="/profile">Показать предложения</Link>
+                        <Link className="button button-primary button-sm" href="/profile?tab=offers">Показать предложения</Link>
                       </div>
                     ) : null}
 
@@ -328,8 +393,14 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
                 {activeTab === "offers" ? (
                   <div className="profile-section-stack">
                     <div className="profile-alert-banner glass">
-                      <strong>Персональные предложения доступны внутри сайта.</strong>
-                      <span className="muted">Подходящие новые и trade-in варианты показываем прямо в профиле и на главной странице без автоматической подписки на уведомления.</span>
+                      <div>
+                        <strong>{aggregatedOfferLabel}</strong>
+                        <div className="muted" style={{ marginTop: 6 }}>
+                          {devicesWithOffers.length > 0
+                            ? `${aggregatedOfferCountLabel} по всем сохраненным устройствам. Подходящие новые и trade-in варианты показываем прямо в профиле и на главной странице.`
+                            : "Подходящие новые и trade-in варианты показываем прямо в профиле и на главной странице без автоматической подписки на уведомления."}
+                        </div>
+                      </div>
                     </div>
 
                     {profile.userDevices.length === 0 ? (
@@ -344,14 +415,14 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
                         {profile.userDevices.map((device) => (
                           <article key={device.id} className="profile-device-card glass">
                             <div>
-                              <div className="section-label">Для устройства</div>
+                              <div className="section-label">{getOfferDeviceCategoryLabel(device)}</div>
                               <h3 style={{ margin: "6px 0 0" }}>{getDeviceTitle(device)}</h3>
                             </div>
 
                             {device.upgradeSuggestions.length > 0 ? (
                               <div className="profile-upgrade-list" style={{ borderTop: "none", paddingTop: 0 }}>
                                 <div className="profile-upgrade-grid">
-                                  {device.upgradeSuggestions.map((product) => (
+                                  {getVisibleOfferSuggestions(device).map((product) => (
                                     <Link
                                       key={product.slug}
                                       href={`/catalog/${product.categorySlug}/${product.slug}`}
@@ -376,6 +447,20 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
                                     </Link>
                                   ))}
                                 </div>
+                                {expandedOfferDeviceId !== device.id && device.upgradeSuggestions.length > getOfferPreview(device.upgradeSuggestions).length ? (
+                                  <div className="actions">
+                                    <Link className="button button-secondary button-sm" href={getOfferDeviceHref(device.id) as never}>
+                                      Остальные варианты ({device.upgradeSuggestions.length - getOfferPreview(device.upgradeSuggestions).length})
+                                    </Link>
+                                  </div>
+                                ) : null}
+                                {expandedOfferDeviceId === device.id && device.upgradeSuggestions.length > getOfferPreview(device.upgradeSuggestions).length ? (
+                                  <div className="actions">
+                                    <Link className="button button-secondary button-sm" href={getOfferDeviceHref(null) as never}>
+                                      Свернуть варианты
+                                    </Link>
+                                  </div>
+                                ) : null}
                               </div>
                             ) : (
                               <div className="profile-device-empty glass">

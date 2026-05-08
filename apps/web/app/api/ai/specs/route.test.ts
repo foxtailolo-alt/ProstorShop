@@ -101,7 +101,7 @@ describe("AI specs route", () => {
     });
   });
 
-  it("parses markdown-wrapped JSON specs from Responses API", async () => {
+  it("parses markdown-wrapped structured specs from Responses API", async () => {
     process.env.OPENAI_API_KEY = "test-key";
     delete process.env.OPENAI_PROXY_URL;
     const fetchMock = vi.fn().mockResolvedValue({
@@ -113,7 +113,7 @@ describe("AI specs route", () => {
             content: [
               {
                 type: "output_text",
-                text: "```json\n{\"Дисплей\":\"6.1 дюйма\",\"Память\":\"128 ГБ\"}\n```",
+                text: "```json\n{\"specs\":[{\"key\":\"Дисплей\",\"value\":\"6.1 дюйма, OLED, 120 Гц\",\"sourceUrl\":\"https://www.mvideo.ru/products/iphone-16-123/specification\",\"evidenceQuote\":\"Экран 6.1 дюйма OLED 120 Гц\"},{\"key\":\"Память\",\"value\":\"128 ГБ\",\"sourceUrl\":\"https://www.mvideo.ru/products/iphone-16-123/specification\",\"evidenceQuote\":\"Встроенная память 128 ГБ\"}]}\n```",
               },
             ],
           },
@@ -132,7 +132,7 @@ describe("AI specs route", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       specs: {
-        "Дисплей": "6.1 дюйма",
+        "Дисплей": "6.1 дюйма, OLED, 120 Гц",
         "Память": "128 ГБ",
       },
     });
@@ -150,6 +150,100 @@ describe("AI specs route", () => {
 
     expect(payload.tools).toEqual([{ type: "web_search_preview" }]);
     expect(payload.text).toBeUndefined();
+  });
+
+  it("drops unsupported high-risk specs when the evidence quote does not confirm the value", async () => {
+    process.env.OPENAI_API_KEY = "test-key";
+    delete process.env.OPENAI_PROXY_URL;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        output: [
+          {
+            type: "message",
+            content: [
+              {
+                type: "output_text",
+                text: JSON.stringify({
+                  specs: [
+                    {
+                      key: "Оперативная память",
+                      value: "16 ГБ",
+                      sourceUrl: "https://www.mvideo.ru/products/iphone-17-black-123/specification",
+                      evidenceQuote: "8GB memory",
+                    },
+                    {
+                      key: "Дисплей",
+                      value: "6.3 дюйма, OLED, 120 Гц",
+                      sourceUrl: "https://www.mvideo.ru/products/iphone-17-black-123/specification",
+                      evidenceQuote: "Дисплей 6.3\" OLED, 120 Гц",
+                    },
+                  ],
+                }),
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { POST } = await import("./route");
+
+    const response = await POST(new Request("http://localhost/api/ai/specs", {
+      method: "POST",
+      body: JSON.stringify({ name: "iPhone 17, Black", brand: "Apple", category: "iPhone 17" }),
+      headers: { "Content-Type": "application/json" },
+    }) as NextRequest);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      specs: {
+        "Дисплей": "6.3 дюйма, OLED, 120 Гц",
+      },
+    });
+  });
+
+  it("rejects specs from domains other than mvideo", async () => {
+    process.env.OPENAI_API_KEY = "test-key";
+    delete process.env.OPENAI_PROXY_URL;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        output: [
+          {
+            type: "message",
+            content: [
+              {
+                type: "output_text",
+                text: JSON.stringify({
+                  specs: [
+                    {
+                      key: "Процессор",
+                      value: "A19",
+                      sourceUrl: "https://www.apple.com/iphone-17/specs/",
+                      evidenceQuote: "A19 chip",
+                    },
+                  ],
+                }),
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { POST } = await import("./route");
+
+    const response = await POST(new Request("http://localhost/api/ai/specs", {
+      method: "POST",
+      body: JSON.stringify({ name: "iPhone 17, Black", brand: "Apple", category: "iPhone 17" }),
+      headers: { "Content-Type": "application/json" },
+    }) as NextRequest);
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: "AI не нашел подтвержденные официальным источником характеристики.",
+    });
   });
 
   it("returns 502 when AI response cannot be parsed as JSON", async () => {
@@ -200,7 +294,7 @@ describe("AI specs route", () => {
             content: [
               {
                 type: "output_text",
-                text: '{"Процессор":"Apple M4"}',
+                text: '{"specs":[{"key":"Процессор","value":"Apple M4","sourceUrl":"https://www.mvideo.ru/products/ipad-pro-123/specification","evidenceQuote":"Процессор Apple M4"}]}' ,
               },
             ],
           },

@@ -4,7 +4,28 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@prostor/db";
 import { getSession } from "../../../lib/auth/session";
+import { getActiveTradeInSnapshot } from "../../../lib/data/pricing";
+import { getTradeInModels, type TradeInSnapshotGraph } from "../../../lib/trade-in-snapshot";
 import { extractStorageLabel, inferDeviceFamilyFromProductText, normalizeText } from "../../../lib/upgrade-suggestions";
+
+function inferTradeInModelCodeFromSources(
+  snapshot: TradeInSnapshotGraph | null,
+  categoryCode: string,
+  ...sources: Array<string | null | undefined>
+) {
+  if (!snapshot) {
+    return null;
+  }
+
+  const models = getTradeInModels(snapshot, categoryCode);
+  const normalizedSource = ` ${normalizeText(sources.filter(Boolean).join(" "))} `;
+  const matched = models
+    .slice()
+    .sort((left, right) => right.title.length - left.title.length)
+    .find((candidate) => normalizedSource.includes(` ${normalizeText(candidate.title)} `));
+
+  return matched?.code ?? null;
+}
 
 export async function addProfileDeviceAction(formData: FormData) {
   const session = await getSession();
@@ -169,12 +190,27 @@ export async function addPurchasedProfileDeviceAction(formData: FormData) {
   if (!categoryCode) {
     throw new Error("Этот товар нельзя автоматически предложить в разделе устройств.");
   }
+  const tradeInSnapshot = await getActiveTradeInSnapshot();
+  const deviceModelCode = inferTradeInModelCodeFromSources(tradeInSnapshot, categoryCode, product.name, item.variantLabel);
 
   const existingDevice = await prisma.userDevice.findFirst({
     where: {
       userId: session.user.id,
-      orderId: order.id,
-      model: product.name,
+      OR: [
+        {
+          orderId: order.id,
+          model: product.name,
+        },
+        {
+          categoryCode,
+          model: product.name,
+        },
+        ...(deviceModelCode
+          ? [{
+              deviceModelCode,
+            }]
+          : []),
+      ],
     },
     select: { id: true },
   });
@@ -188,6 +224,7 @@ export async function addPurchasedProfileDeviceAction(formData: FormData) {
         categoryCode,
         brand: product.brand,
         model: product.name,
+        deviceModelCode,
         storage: extractStorageLabel(item.variantLabel) ?? extractStorageLabel(product.name),
         condition: "Куплено в Просторе",
         estimatedTradeInValue: 0,

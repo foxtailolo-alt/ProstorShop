@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { AddToCartButton } from "../cart/add-to-cart-button";
 import { ProductCardMedia } from "../product/product-card-media";
 import type { HomepageSectionItem } from "../../lib/data/catalog";
 
 type Props = {
   title: string;
   items: HomepageSectionItem[];
-  addToCartAction: (fd: FormData) => Promise<void>;
+  addToCartAction: (fd: FormData) => Promise<{ cartCount: number; productSlug: string }>;
 };
 
 export function BestsellersSection({ title, items, addToCartAction }: Props) {
@@ -47,12 +48,15 @@ export function BestsellersSection({ title, items, addToCartAction }: Props) {
                   </Link>
                 </div>
               ) : (
-                <form action={addToCartAction} className="product-card-actions">
-                  <input type="hidden" name="productSlug" value={highlighted.product.slug} />
-                  <input type="hidden" name="quantity" value="1" />
-                  <input type="hidden" name="redirectTo" value="/" />
-                  <button className="button button-primary button-sm" type="submit">В корзину</button>
-                </form>
+                <div className="product-card-actions">
+                  <AddToCartButton
+                    addToCartAction={addToCartAction}
+                    productSlug={highlighted.product.slug}
+                    productName={highlighted.product.name}
+                    className="button button-primary button-sm"
+                    label="В корзину"
+                  />
+                </div>
               )}
             </div>
           </article>
@@ -89,12 +93,15 @@ export function BestsellersSection({ title, items, addToCartAction }: Props) {
                       </Link>
                     </div>
                   ) : (
-                    <form action={addToCartAction} className="product-card-actions">
-                      <input type="hidden" name="productSlug" value={p.slug} />
-                      <input type="hidden" name="quantity" value="1" />
-                      <input type="hidden" name="redirectTo" value="/" />
-                      <button className="button button-primary button-sm" type="submit">В корзину</button>
-                    </form>
+                    <div className="product-card-actions">
+                      <AddToCartButton
+                        addToCartAction={addToCartAction}
+                        productSlug={p.slug}
+                        productName={p.name}
+                        className="button button-primary button-sm"
+                        label="В корзину"
+                      />
+                    </div>
                   )}
                 </div>
               </article>

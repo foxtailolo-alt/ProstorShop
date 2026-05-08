@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { AddToCartButton } from "../../../../components/cart/add-to-cart-button";
 import { StoreNav } from "../../../../components/layout/store-nav";
 import { ProductCardMedia } from "../../../../components/product/product-card-media";
 import { BannerCarousel } from "../../../../components/store/banner-carousel";
@@ -15,12 +16,6 @@ import {
   getAllCategorySlugs,
   type CategoryTreeNode,
 } from "../../../../lib/data/catalog";
-
-async function addToCartFormAction(formData: FormData) {
-  "use server";
-
-  await addToCartAction(formData);
-}
 
 type CategoryPageProps = {
   params: Promise<{
@@ -230,12 +225,13 @@ async function LeafCategoryProducts({ categorySlug }: { categorySlug: string }) 
                     В корзину
                   </Link>
                 ) : (
-                  <form action={addToCartFormAction} className="product-card-actions">
-                    <input type="hidden" name="productSlug" value={product.slug} />
-                    <input type="hidden" name="quantity" value="1" />
-                    <input type="hidden" name="redirectTo" value={`/catalog/${categorySlug}`} />
-                    <button className="button button-primary button-sm" type="submit">В корзину</button>
-                  </form>
+                  <AddToCartButton
+                    addToCartAction={addToCartAction}
+                    productSlug={product.slug}
+                    productName={product.name}
+                    className="button button-primary button-sm"
+                    label="В корзину"
+                  />
                 )}
                 <Link className="button button-secondary button-sm" href={`/catalog/${categorySlug}/${product.slug}`}>
                   Подробнее

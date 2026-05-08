@@ -7,7 +7,11 @@ import {
 } from "@prostor/core";
 import { prisma } from "@prostor/db";
 import { getCompetitorSyncScopeDefinition } from "../competitor-sync-scopes";
-import { buildFallbackServiceCatalogEntries, type ServiceCatalogEntry } from "../service-catalog";
+import {
+  buildFallbackServiceCatalogEntries,
+  normalizeServiceCatalogModelNames,
+  type ServiceCatalogEntry,
+} from "../service-catalog";
 import { type TradeInSnapshotGraph } from "../trade-in-snapshot";
 import { findNodeBySlug, getAllCategorySlugs, loadCategoryTree } from "./catalog";
 
@@ -199,33 +203,37 @@ export async function listServiceCatalogEntries() {
   for (const service of services) {
     for (const model of service.models) {
       for (const variant of model.variants) {
-        entries.push({
-          serviceId: service.id,
-          modelId: model.id,
-          variantId: variant.id,
-          serviceSlug: service.slug,
-          serviceName: service.name,
-          serviceDescription: service.description,
-          modelName: model.name,
-          modelSlug: model.slug,
-          brand: model.brand,
-          variantName: variant.name,
-          variantSlug: variant.slug,
-          variantDescription: variant.description,
-          sourceKinds: Array.isArray(variant.sourceKinds) ? variant.sourceKinds.filter((item): item is string => typeof item === "string") : [],
-          metadata: variant.metadata && typeof variant.metadata === "object" && !Array.isArray(variant.metadata)
-            ? (variant.metadata as Record<string, unknown>)
-            : {},
-          partPrice: Number(variant.partPrice),
-          laborPrice: Number(variant.laborPrice),
-          totalPrice: Number(variant.totalPrice),
-          currency: variant.currency,
-          sourceFile: variant.sourceFile,
-          sourceLabel: variant.sourceLabel,
-          serviceSortOrder: service.sortOrder,
-          modelSortOrder: model.sortOrder,
-          variantSortOrder: variant.sortOrder,
-        });
+        const normalizedModels = normalizeServiceCatalogModelNames(model.name);
+
+        for (const normalizedModel of normalizedModels) {
+          entries.push({
+            serviceId: service.id,
+            modelId: normalizedModels.length > 1 ? `${model.id}:${normalizedModel.modelSlug}` : model.id,
+            variantId: variant.id,
+            serviceSlug: service.slug,
+            serviceName: service.name,
+            serviceDescription: service.description,
+            modelName: normalizedModel.modelName,
+            modelSlug: normalizedModel.modelSlug,
+            brand: model.brand,
+            variantName: variant.name,
+            variantSlug: variant.slug,
+            variantDescription: variant.description,
+            sourceKinds: Array.isArray(variant.sourceKinds) ? variant.sourceKinds.filter((item): item is string => typeof item === "string") : [],
+            metadata: variant.metadata && typeof variant.metadata === "object" && !Array.isArray(variant.metadata)
+              ? (variant.metadata as Record<string, unknown>)
+              : {},
+            partPrice: Number(variant.partPrice),
+            laborPrice: Number(variant.laborPrice),
+            totalPrice: Number(variant.totalPrice),
+            currency: variant.currency,
+            sourceFile: variant.sourceFile,
+            sourceLabel: variant.sourceLabel,
+            serviceSortOrder: service.sortOrder,
+            modelSortOrder: normalizedModel.modelSortOrder,
+            variantSortOrder: variant.sortOrder,
+          });
+        }
       }
     }
   }

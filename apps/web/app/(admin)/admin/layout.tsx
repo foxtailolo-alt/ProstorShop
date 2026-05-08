@@ -49,6 +49,9 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
           <div className="section-label" style={{ margin: 0 }}>Backoffice</div>
           <MarketingToggle enabled={marketingEnabled} />
         </div>
+        <Link href="/" className="button button-primary admin-nav-link" style={{ marginBottom: 12 }}>
+          ← В магазин
+        </Link>
         <div className="grid">
           {visibleNavigation.map((item) => (
             <Link key={item.href} href={item.href as "/"} className="button button-secondary admin-nav-link">

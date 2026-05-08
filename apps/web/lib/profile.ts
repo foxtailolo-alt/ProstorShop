@@ -1,8 +1,10 @@
 import { prisma } from "@prostor/db";
 import { getSession } from "./auth/session";
 import { listCatalogProducts, loadCategoryTree } from "./data/catalog";
+import { getActiveTradeInSnapshot } from "./data/pricing";
 import { getUserReferralPromoCode } from "./promo";
-import { buildUpgradeSuggestions, extractStorageLabel, inferDeviceFamilyFromProductText, normalizeText } from "./upgrade-suggestions";
+import { getTradeInModels, type TradeInSnapshotGraph } from "./trade-in-snapshot";
+import { buildCurrentDeviceRankLabel, buildUpgradeSuggestions, extractStorageLabel, getCategoryCodeFamily, getModelRank, inferDeviceFamilyFromProductText, normalizeText } from "./upgrade-suggestions";
 
 type PendingPurchasedDeviceSourceOrder = {
   id: string;
@@ -21,18 +23,106 @@ type PendingPurchasedDeviceSourceOrder = {
 };
 
 type PendingPurchasedDeviceSourceUserDevice = {
+  categoryCode: string;
+  deviceModelCode: string | null;
   orderId: string | null;
   model: string;
+  storage?: string | null;
 };
 
-function buildPendingPurchasedDevices(
+function buildPendingPurchasedDeviceKey(orderId: string, model: string) {
+  return `${orderId}:${normalizeText(model)}`;
+}
+
+function buildExistingDeviceKey(categoryCode: string, model: string) {
+  const family = getCategoryCodeFamily(categoryCode) ?? categoryCode;
+  return `${family}:${normalizeText(model)}`;
+}
+
+function buildComparableDeviceKey(categoryCode: string, model: string, storage?: string | null) {
+  const family = getCategoryCodeFamily(categoryCode);
+  const normalizedStorage = extractStorageLabel(storage) ?? normalizeText(storage ?? "");
+
+  if (!family) {
+    return `${categoryCode}:${normalizeText(model)}:${normalizedStorage}`;
+  }
+
+  const rank = getModelRank(family, buildCurrentDeviceRankLabel(family, { model }));
+  if (rank > 0) {
+    return `${family}:${rank}:${normalizedStorage}`;
+  }
+
+  return `${family}:${normalizeText(model)}:${normalizedStorage}`;
+}
+
+function inferTradeInModelCodeFromSources(
+  snapshot: TradeInSnapshotGraph | null,
+  categoryCode: string,
+  ...sources: Array<string | null | undefined>
+) {
+  if (!snapshot) {
+    return null;
+  }
+
+  const models = getTradeInModels(snapshot, categoryCode);
+  const normalizedSource = ` ${normalizeText(sources.filter(Boolean).join(" "))} `;
+  const matched = models
+    .slice()
+    .sort((left, right) => right.title.length - left.title.length)
+    .find((candidate) => normalizedSource.includes(` ${normalizeText(candidate.title)} `));
+
+  return matched?.code ?? null;
+}
+
+export function buildPendingPurchasedDevices(
   orders: PendingPurchasedDeviceSourceOrder[],
   userDevices: PendingPurchasedDeviceSourceUserDevice[],
+  snapshot: TradeInSnapshotGraph | null = null,
 ) {
-  const linkedOrderIds = new Set(
+  const linkedPurchasedComparableKeys = new Set(
+    userDevices.flatMap((device) => {
+      if (!device.orderId) {
+        return [];
+      }
+
+      return [buildComparableDeviceKey(device.categoryCode, device.model, device.storage)].map((key) => `${device.orderId}:${key}`);
+    }),
+  );
+  const linkedPurchasedItemModelCodes = new Set(
+    userDevices.flatMap((device) => {
+      if (!device.orderId) {
+        return [];
+      }
+
+      const normalizedCategoryCode = getCategoryCodeFamily(device.categoryCode) ?? device.categoryCode;
+      const inferredDeviceModelCode = device.deviceModelCode ?? inferTradeInModelCodeFromSources(snapshot, normalizedCategoryCode, device.model, device.storage);
+      return inferredDeviceModelCode ? [`${device.orderId}:${inferredDeviceModelCode}`] : [];
+    }),
+  );
+  const linkedPurchasedItems = new Set(
     userDevices
-      .map((device) => device.orderId)
-      .filter((orderId): orderId is string => Boolean(orderId)),
+      .flatMap((device) => {
+        if (!device.orderId) {
+          return [];
+        }
+
+        return [buildPendingPurchasedDeviceKey(device.orderId, device.model)];
+      }),
+  );
+  const existingDevices = new Set(
+    userDevices.map((device) => buildExistingDeviceKey(device.categoryCode, device.model)),
+  );
+  const existingDeviceModelCodes = new Set(
+    userDevices
+      .map((device) => {
+        if (device.deviceModelCode) {
+          return device.deviceModelCode;
+        }
+
+        const normalizedCategoryCode = getCategoryCodeFamily(device.categoryCode) ?? device.categoryCode;
+        return inferTradeInModelCodeFromSources(snapshot, normalizedCategoryCode, device.model, device.storage);
+      })
+      .filter((deviceModelCode): deviceModelCode is string => Boolean(deviceModelCode)),
   );
 
   return orders.flatMap((order) => {
@@ -50,8 +140,26 @@ function buildPendingPurchasedDevices(
       if (!categoryCode) {
         return [];
       }
+      const deviceModelCode = inferTradeInModelCodeFromSources(snapshot, categoryCode, product.name, item.variantLabel);
+      const comparableDeviceKey = buildComparableDeviceKey(categoryCode, product.name, item.variantLabel);
 
-      if (linkedOrderIds.has(order.id)) {
+      if (linkedPurchasedItems.has(buildPendingPurchasedDeviceKey(order.id, product.name))) {
+        return [];
+      }
+
+      if (linkedPurchasedComparableKeys.has(`${order.id}:${comparableDeviceKey}`)) {
+        return [];
+      }
+
+      if (deviceModelCode && linkedPurchasedItemModelCodes.has(`${order.id}:${deviceModelCode}`)) {
+        return [];
+      }
+
+      if (deviceModelCode && existingDeviceModelCodes.has(deviceModelCode)) {
+        return [];
+      }
+
+      if (existingDevices.has(buildExistingDeviceKey(categoryCode, product.name))) {
         return [];
       }
 
@@ -77,7 +185,7 @@ export async function getCurrentUserProfile() {
     return null;
   }
 
-  const [user, referralPromoCode, catalogProducts, categoryTree] = await Promise.all([
+  const [user, referralPromoCode, catalogProducts, categoryTree, tradeInSnapshot] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       include: {
@@ -137,13 +245,14 @@ export async function getCurrentUserProfile() {
     getUserReferralPromoCode(session.user.id),
     listCatalogProducts(),
     loadCategoryTree(),
+    getActiveTradeInSnapshot(),
   ]);
 
   if (!user) {
     return null;
   }
 
-  const pendingPurchasedDevices = buildPendingPurchasedDevices(user.orders, user.userDevices);
+  const pendingPurchasedDevices = buildPendingPurchasedDevices(user.orders, user.userDevices, tradeInSnapshot);
 
   return {
     id: user.id,

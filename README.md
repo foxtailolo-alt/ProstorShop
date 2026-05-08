@@ -238,6 +238,12 @@ infra/
 - Prisma deploy nuance verified 2026-05-06: the release must also provide `packages/db/.env` or equivalent `DATABASE_URL`/`DIRECT_URL` values for `prisma db push`; relying only on root `.env` was not enough in the isolated release dir.
 - Prisma schema nuance verified 2026-05-06: keep the `LegacyUserAvatar` mapping in `packages/db/prisma/schema.prisma` until the old `UserAvatar` table is migrated or intentionally removed, otherwise production `db push` stops on destructive data-loss warning.
 - Production env nuance verified 2026-05-07: after deploy or hotfix, explicitly verify `/home/deploy/ProstorShop/.env` still contains `OPENAI_PROXY_URL=http://170.168.33.63:3100` and `OPENAI_PROXY_SECRET=...`; this config was lost once and immediately broke prod AI.
+- Production was redeployed again on 2026-05-08 through `origin/main` commits `0cc8568`, `8208a24`, and `8824d4c`; the release includes profile/personal-offer fixes, stricter AI specs sourcing, service catalog slash-model normalization, homepage/category-card image fit fix, admin back-to-store button, and the removal of the `snapshot vN` badge from saved devices in `/profile`.
+- Verified 2026-05-08: local workspace `.env` and production both point to the same remote Neon database (`ep-crimson-fog-agn0bs14...`), so product/admin data changes made from localhost were already shared with production; no separate DB export/import step was required for that deploy.
+- Prod competitor sync outage on 2026-05-08 was caused by missing Playwright Chromium on the VPS. Server-side fix: in `/home/deploy/ProstorShop` run `corepack pnpm --filter @prostor/web exec playwright install-deps chromium` and then `PLAYWRIGHT_BROWSERS_PATH=0 corepack pnpm --filter @prostor/web exec playwright install chromium`.
+- Verified 2026-05-08: Playwright Chromium now exists in project-local `.local-browsers` under `/home/deploy/ProstorShop/node_modules/.pnpm/playwright-core@1.56.1/node_modules/playwright-core/.local-browsers`, which is the required runtime layout for competitor sync on this VPS.
+- Session handoff 2026-05-08: production health checks returned HTTP 200 for `/`, `/profile`, and `/login` after deploys; competitor sync environment was repaired, but the full admin-triggered sync flow was not smoke-tested end-to-end in an authenticated prod browser during this session.
+- Local-only leftovers at session close: untracked `.vscode/`, `inspect_order.js`, and `packages/db/inspect_db.ts` remain in the workspace and were intentionally not committed.
 - Local validation status at session close: `corepack pnpm typecheck`, `corepack pnpm test`, and `corepack pnpm --filter @prostor/web build` all pass on commit `8cb0c27`.
 - Remaining non-blocking issue at session close: Telegram Mini App / hydration warnings still appear in local browser validation, but they did not break the deployed release or public health checks.
 
@@ -250,6 +256,7 @@ infra/
 5. After the next deploy, run a quick prod AI smoke check against `/api/ai/seo` or `/api/ai/specs` under an authenticated admin session to catch missing proxy env immediately.
 6. Convert schema changes into proper Prisma migrations before the next structural DB update.
 7. Verify Telegram posting end-to-end with the current bot token and target channel permissions.
+8. Run one authenticated prod smoke test of `/admin/competitor-pricing` and confirm a new sync run gets past the previous `Chromium for Playwright` failure and starts collecting rows.
 
 ## Build Order
 

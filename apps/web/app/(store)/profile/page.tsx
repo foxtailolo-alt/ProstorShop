@@ -366,7 +366,6 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
                               <span className="pill pill-muted">{device.model}</span>
                               {device.storage ? <span className="pill pill-muted">{device.storage}</span> : null}
                               <span className="pill pill-muted">{device.condition}</span>
-                              {device.lastTradeInSnapshotVersion ? <span className="pill pill-muted">snapshot v{device.lastTradeInSnapshotVersion}</span> : null}
                             </div>
 
                             <div className="muted">

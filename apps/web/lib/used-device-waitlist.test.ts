@@ -33,6 +33,54 @@ function makeProduct(input: Partial<CatalogProduct> & Pick<CatalogProduct, "slug
 }
 
 describe("used device waitlist matcher", () => {
+  it("matches grouped light and dark color preferences", () => {
+    const lightEntry = {
+      categoryCode: "iphone",
+      brand: "Apple",
+      model: "15 Pro",
+      storage: "256 ГБ",
+      color: "Светлый",
+      modelRank: buildUsedDeviceWaitlistModelRank({ categoryCode: "iphone", brand: "Apple", model: "15 Pro" }),
+    };
+
+    const darkEntry = {
+      categoryCode: "iphone",
+      brand: "Apple",
+      model: "15 Pro",
+      storage: "256 ГБ",
+      color: "Темный",
+      modelRank: buildUsedDeviceWaitlistModelRank({ categoryCode: "iphone", brand: "Apple", model: "15 Pro" }),
+    };
+
+    const naturalProduct = makeProduct({
+      slug: "iphone-15-pro-natural",
+      categorySlug: "trade-in-ustroystva-trade-in-smartfony",
+      name: "iPhone 15 Pro 256Gb | Natural",
+      brand: "Trade-in смартфоны",
+      price: 89_000,
+      attributes: {
+        storage: "256 ГБ",
+        color: "Natural",
+      },
+    });
+
+    const whiteProduct = makeProduct({
+      slug: "iphone-15-pro-white",
+      categorySlug: "trade-in-ustroystva-trade-in-smartfony",
+      name: "iPhone 15 Pro 256Gb | White",
+      brand: "Trade-in смартфоны",
+      price: 89_000,
+      attributes: {
+        storage: "256 ГБ",
+        color: "White",
+      },
+    });
+
+    expect(matchUsedDeviceWaitlistEntryToProduct(lightEntry, whiteProduct).isMatch).toBe(true);
+    expect(matchUsedDeviceWaitlistEntryToProduct(lightEntry, naturalProduct).isMatch).toBe(false);
+    expect(matchUsedDeviceWaitlistEntryToProduct(darkEntry, naturalProduct).isMatch).toBe(true);
+  });
+
   it("prefers attribute-based exact matches for requested storage and color", () => {
     const entry = {
       categoryCode: "iphone",

@@ -106,6 +106,16 @@ infra/
 5. Easy admin workflows for non-technical operators.
 6. Accurate attribution for Yandex traffic and Telegram conversions.
 
+## Telegram Admin Bootstrap
+
+- `TELEGRAM_ADMIN_IDS` is the source of truth for bootstrap admin access.
+- Every Telegram ID listed there must receive `owner` role on login, not `manager`.
+- Current owner-level Telegram admins:
+  - You — `414772073`
+  - Михаил — `910424733`
+  - Дима — `617335163`
+  - Вова — `173228425`
+
 ## Current Delivery Status
 
 ### Done
@@ -186,7 +196,14 @@ infra/
 ### Verified Context
 
 - Root business model is now a real store, not a static showcase.
-- Database is PostgreSQL on Neon, Prisma schema is already pushed. **347 products and 96 categories** imported from `offers.xlsx` with CDN image URLs (`https://cdn.ibotby.ru/...`).
+- Production database was moved off Neon on 2026-05-12 after a `data transfer quota` outage. Live production now uses local PostgreSQL on the VPS via `DATABASE_URL` and `DIRECT_URL` pointing to `127.0.0.1`.
+- A full live JSON export was captured before the cutover at `packages/db/tmp_resale52/live-export-2026-05-12T14-44-17-448Z.json`.
+- A full PostgreSQL custom dump was captured after the cutover at `packages/db/tmp_resale52/prostor-pg-20260512_181131.dump`.
+- A globals/roles dump was also captured at `packages/db/tmp_resale52/prostor-pg-globals-20260512-181304.sql`.
+- Restore helpers now exist in `packages/db/scripts/export-live-db.ts` and `packages/db/scripts/import-live-db.ts` for JSON-based export/import of the live Prisma data.
+- Production VPS now has local PostgreSQL 12 installed and enabled via `postgresql.service`.
+- Daily production PostgreSQL backups are scheduled in `/etc/cron.d/prostor-pg-backup`: 03:00 every day, custom-format dump to `/home/deploy/backups/prostor-pg-$(date +%Y%m%d).dump`, retention 14 days.
+- Database content remains the same live catalog imported from `offers.xlsx`: **347 products and 96 categories** with CDN image URLs (`https://cdn.ibotby.ru/...`).
 - `Product.imageUrls` is the active gallery field; first image is treated as primary image.
 - `Product.specs Json?` stores key-value characteristics filled via AI or manually.
 - `Product.options Json?` stores option groups with variant/additive pricing model.
@@ -240,9 +257,15 @@ infra/
 - Production env nuance verified 2026-05-07: after deploy or hotfix, explicitly verify `/home/deploy/ProstorShop/.env` still contains `OPENAI_PROXY_URL=http://170.168.33.63:3100` and `OPENAI_PROXY_SECRET=...`; this config was lost once and immediately broke prod AI.
 - Production was redeployed again on 2026-05-08 through `origin/main` commits `0cc8568`, `8208a24`, and `8824d4c`; the release includes profile/personal-offer fixes, stricter AI specs sourcing, service catalog slash-model normalization, homepage/category-card image fit fix, admin back-to-store button, and the removal of the `snapshot vN` badge from saved devices in `/profile`.
 - Verified 2026-05-08: local workspace `.env` and production both point to the same remote Neon database (`ep-crimson-fog-agn0bs14...`), so product/admin data changes made from localhost were already shared with production; no separate DB export/import step was required for that deploy.
-- Prod competitor sync outage on 2026-05-08 was caused by missing Playwright Chromium on the VPS. Server-side fix: in `/home/deploy/ProstorShop` run `corepack pnpm --filter @prostor/web exec playwright install-deps chromium` and then `PLAYWRIGHT_BROWSERS_PATH=0 corepack pnpm --filter @prostor/web exec playwright install chromium`.
+- Verified 2026-05-12: the previous Neon database was exported successfully before shutdown. Local storefront/browser checks after the cutover confirmed homepage banners/products and catalog categories were still present while `prostor-web` and `prostor-bot` remained active against localhost PostgreSQL.
+- Prod competitor sync outage on 2026-05-08 was caused by missing Playwright Chromium on the VPS. As of 2026-05-19, `corepack pnpm --filter @prostor/web build:prod` now auto-installs Chromium into the project-local Playwright cache and, on Linux root deploys, also runs `playwright install-deps chromium` during the release build.
 - Verified 2026-05-08: Playwright Chromium now exists in project-local `.local-browsers` under `/home/deploy/ProstorShop/node_modules/.pnpm/playwright-core@1.56.1/node_modules/playwright-core/.local-browsers`, which is the required runtime layout for competitor sync on this VPS.
 - Session handoff 2026-05-08: production health checks returned HTTP 200 for `/`, `/profile`, and `/login` after deploys; competitor sync environment was repaired, but the full admin-triggered sync flow was not smoke-tested end-to-end in an authenticated prod browser during this session.
+- Verified 2026-05-21: website Telegram auth now uses a bot-confirm flow with `TelegramLoginRequest` persistence, `/api/auth/telegram-link` create/poll endpoints, and bot-side confirmation callbacks; the previous website fallback that asked Telegram to confirm external login was removed.
+- Verified 2026-05-21: all configured `TELEGRAM_ADMIN_IDS` are bootstrapped with full owner access (`414772073`, `910424733`, `617335163`, `173228425`) and the README remains the source of truth for future owner bootstrap changes.
+- Verified 2026-05-21: local web development is expected to run against the VPS PostgreSQL through an SSH tunnel `-L 55432:127.0.0.1:5432`; `apps/web/.env.local` should point `DATABASE_URL` and `DIRECT_URL` to `127.0.0.1:55432` and use `NEXT_PUBLIC_SITE_URL=http://localhost:3001`.
+- Verified 2026-05-21: waitlist wizard now follows DamProdam category params instead of a generic pseudo-size field. Phones no longer show `Размер`; only iPad/Mac relevant size questions and Apple Watch case size remain. Waitlist color is now the final step and stores grouped preferences `Не важно` / `Светлый` / `Темный`.
+- Session handoff 2026-05-21: current untracked local-only artifacts still include `.vscode/`, `inspect_order.js`, `inspect_script.ts`, `packages/db/homepage.html`, `packages/db/inspect_db.ts`, `packages/db/tmp_resale52/`, and `requestId.txt`; do not commit them in the next session unless there is a specific reason.
 - Local-only leftovers at session close: untracked `.vscode/`, `inspect_order.js`, and `packages/db/inspect_db.ts` remain in the workspace and were intentionally not committed.
 - Local validation status at session close: `corepack pnpm typecheck`, `corepack pnpm test`, and `corepack pnpm --filter @prostor/web build` all pass on commit `8cb0c27`.
 - Remaining non-blocking issue at session close: Telegram Mini App / hydration warnings still appear in local browser validation, but they did not break the deployed release or public health checks.
@@ -250,13 +273,16 @@ infra/
 ### Next Recommended Steps
 
 1. Run a focused live smoke test for the newly deployed flows: `/admin/clients`, `/admin/orders`, product-page no-reload add-to-cart, recommendation-card add-to-cart, cart bundle discount, trade-in autofill, and service autofill.
-2. Investigate and clean up the remaining Telegram Mini App / hydration warnings seen in local browser validation, especially around `telegram-mini-app-bootstrap.tsx` and client/server markup differences.
-3. Populate homepage sections via `/admin/marketing/homepage` if storefront merchandising is still incomplete.
-4. If media changed locally in a future session, sync `apps/web/public/uploads` or `apps/web/public/uploads/categories` separately to `/home/deploy/prostor-uploads/...`; `deploy:pack` still excludes uploads by design.
-5. After the next deploy, run a quick prod AI smoke check against `/api/ai/seo` or `/api/ai/specs` under an authenticated admin session to catch missing proxy env immediately.
-6. Convert schema changes into proper Prisma migrations before the next structural DB update.
-7. Verify Telegram posting end-to-end with the current bot token and target channel permissions.
-8. Run one authenticated prod smoke test of `/admin/competitor-pricing` and confirm a new sync run gets past the previous `Chromium for Playwright` failure and starts collecting rows.
+2. Run one manual restore drill from `packages/db/tmp_resale52/prostor-pg-20260512_181131.dump` or from `packages/db/tmp_resale52/live-export-2026-05-12T14-44-17-448Z.json` into a scratch PostgreSQL database, so the new backup path is verified end-to-end.
+3. Keep `/home/deploy/backups` under disk-space review; the new cron keeps 14 days of PostgreSQL dumps but uploaded media still needs its own backup policy.
+4. Investigate and clean up the remaining Telegram Mini App / hydration warnings seen in local browser validation, especially around `telegram-mini-app-bootstrap.tsx` and client/server markup differences.
+5. Populate homepage sections via `/admin/marketing/homepage` if storefront merchandising is still incomplete.
+6. If media changed locally in a future session, sync `apps/web/public/uploads` or `apps/web/public/uploads/categories` separately to `/home/deploy/prostor-uploads/...`; `deploy:pack` still excludes uploads by design.
+7. After the next deploy, run a quick prod AI smoke check against `/api/ai/seo` or `/api/ai/specs` under an authenticated admin session to catch missing proxy env immediately.
+8. Convert schema changes into proper Prisma migrations before the next structural DB update.
+9. Verify Telegram posting end-to-end with the current bot token and target channel permissions.
+10. Run one authenticated prod smoke test of `/admin/competitor-pricing` and confirm a new sync run gets past the previous `Chromium for Playwright` failure and starts collecting rows.
+11. Run one authenticated prod smoke test of `/waitlist/add` for iPhone, iPad/Mac, and Apple Watch to confirm the new category-specific step set and grouped color preference behave as expected in the real UI.
 
 ## Build Order
 

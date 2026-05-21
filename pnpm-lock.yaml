@@ -26,6 +26,9 @@ importers:
 
   apps/bot:
     dependencies:
+      '@prostor/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@prostor/db':
         specifier: workspace:*
         version: link:../../packages/db

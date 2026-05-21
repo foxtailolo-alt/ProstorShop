@@ -3,6 +3,7 @@ import { setSession } from "../../../../lib/auth/session";
 import { syncTelegramUser, validateTelegramAuth } from "../../../../lib/auth/telegram";
 
 type RequestBody = {
+  initData?: string;
   redirectTo?: string;
 };
 

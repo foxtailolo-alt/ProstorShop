@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:prod": "node ../../scripts/assert-public-env.mjs && next build",
+    "build:prod": "node ../../scripts/assert-public-env.mjs && next build && node ../../scripts/ensure-playwright-chromium.mjs",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"

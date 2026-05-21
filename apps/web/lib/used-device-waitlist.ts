@@ -57,6 +57,76 @@ function normalizeColor(value: string | null | undefined) {
   return normalized;
 }
 
+function getColorTone(value: string | null | undefined) {
+  const normalized = normalizeColor(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const darkTokens = [
+    "темный",
+    "temnyy",
+    "dark",
+    "black",
+    "черн",
+    "graphite",
+    "midnight",
+    "space black",
+    "space gray",
+    "space grey",
+    "gray",
+    "grey",
+    "сер",
+    "titan",
+    "титан",
+    "natural",
+    "blue",
+    "син",
+    "green",
+    "зел",
+    "purple",
+    "фиолет",
+  ];
+  const lightTokens = [
+    "светлый",
+    "svetlyy",
+    "light",
+    "white",
+    "бел",
+    "silver",
+    "сереб",
+    "starlight",
+    "gold",
+    "pink",
+    "rose",
+    "роз",
+    "beige",
+    "беж",
+    "cream",
+    "крем",
+    "yellow",
+    "желт",
+  ];
+
+  if (normalized === "темный") {
+    return "dark" as const;
+  }
+
+  if (normalized === "светлый") {
+    return "light" as const;
+  }
+
+  if (darkTokens.some((token) => normalized.includes(token))) {
+    return "dark" as const;
+  }
+
+  if (lightTokens.some((token) => normalized.includes(token))) {
+    return "light" as const;
+  }
+
+  return null;
+}
+
 function normalizeDisplaySize(value: string | null | undefined) {
   const normalized = normalizeOptionalText(value);
   if (!normalized) {
@@ -181,6 +251,22 @@ function compareOptionalText(requested: string | null, actual: string | null) {
   return Boolean(left && right && (left === right || left.includes(right) || right.includes(left)));
 }
 
+function compareColorPreference(requested: string | null, actual: string | null) {
+  if (!requested) {
+    return true;
+  }
+
+  const normalizedRequested = normalizeColor(requested);
+  const isGroupedPreference = normalizedRequested === "светлый" || normalizedRequested === "темный";
+  const requestedTone = isGroupedPreference ? getColorTone(requested) : null;
+  const actualTone = isGroupedPreference ? getColorTone(actual) : null;
+  if (requestedTone && actualTone) {
+    return requestedTone === actualTone;
+  }
+
+  return compareOptionalText(requested, actual);
+}
+
 function inferMatchSource(traits: ReturnType<typeof resolveProductTraits>, breakdown: UsedDeviceWaitlistMatchBreakdown) {
   const sources = [
     traits.storage.source,
@@ -239,7 +325,7 @@ export function matchUsedDeviceWaitlistEntryToProduct(
 
   const requestedColor = normalizeColor(entry.color);
   const actualColor = normalizeColor(traits.color.value);
-  const colorMatched = requestedColor ? compareOptionalText(requestedColor, actualColor) : true;
+  const colorMatched = requestedColor ? compareColorPreference(requestedColor, actualColor) : true;
 
   const requestedDisplay = normalizeDisplaySize(entry.displaySize);
   const actualDisplay = normalizeDisplaySize(traits.displaySize.value);

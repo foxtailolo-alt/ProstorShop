@@ -9,6 +9,7 @@ type TelegramWebApp = {
 	setHeaderColor(color: TelegramWebAppColorKey | `#${string}`): void;
 	setBackgroundColor(color: TelegramWebAppColorKey | `#${string}`): void;
 	setBottomBarColor(color: TelegramWebAppColorKey | `#${string}`): void;
+	initData?: string;
 	initDataUnsafe?: {
 		auth_date?: number;
 		hash?: string;

@@ -8,6 +8,47 @@ export function normalizeTelegramMiniAppStartParam(value: string | null | undefi
   return trimmedValue.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
 }
 
+const TELEGRAM_LOGIN_START_PREFIX = "login-";
+
+export function buildTelegramLoginStartParam(requestId: string) {
+  const normalizedRequestId = normalizeTelegramMiniAppStartParam(requestId);
+
+  if (!normalizedRequestId) {
+    throw new Error("Telegram login request id is required.");
+  }
+
+  return `${TELEGRAM_LOGIN_START_PREFIX}${normalizedRequestId}`;
+}
+
+export function parseTelegramLoginStartParam(value: string | null | undefined) {
+  const normalizedValue = normalizeTelegramMiniAppStartParam(value);
+
+  if (!normalizedValue?.startsWith(TELEGRAM_LOGIN_START_PREFIX)) {
+    return null;
+  }
+
+  return normalizedValue.slice(TELEGRAM_LOGIN_START_PREFIX.length) || null;
+}
+
+export function buildTelegramBotStartUrl(input: {
+  botUsername: string;
+  startParam?: string | null;
+}) {
+  const botUsername = input.botUsername.replace(/^@/, "").trim();
+
+  if (!botUsername) {
+    throw new Error("Telegram bot username is required to build bot start URLs.");
+  }
+
+  const startParam = normalizeTelegramMiniAppStartParam(input.startParam);
+
+  if (!startParam) {
+    return `https://t.me/${botUsername}`;
+  }
+
+  return `https://t.me/${botUsername}?start=${encodeURIComponent(startParam)}`;
+}
+
 export function buildTelegramMiniAppLaunchUrl(input: {
   botUsername: string;
   shortName?: string | null;

@@ -41,8 +41,9 @@ export function TelegramMiniAppBootstrap() {
       const authUser = webApp.initDataUnsafe?.user;
       const authDate = webApp.initDataUnsafe?.auth_date;
       const hash = webApp.initDataUnsafe?.hash;
+      const initData = webApp.initData;
 
-      if (!authUser || !authDate || !hash) {
+      if (!authUser || !authDate || !hash || !initData) {
         if (attempt < MINI_APP_AUTH_MAX_ATTEMPTS) {
           retryTimer = window.setTimeout(() => {
             void bootstrapAuth(attempt + 1);
@@ -71,6 +72,7 @@ export function TelegramMiniAppBootstrap() {
             photo_url: authUser.photo_url,
             auth_date: authDate,
             hash,
+            initData,
             redirectTo: `${window.location.pathname}${window.location.search}`,
           }),
         });

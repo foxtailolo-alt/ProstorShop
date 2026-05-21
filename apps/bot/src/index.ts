@@ -1,3 +1,5 @@
+import { parseTelegramLoginStartParam } from "@prostor/core";
+import { confirmTelegramLoginRequest } from "@prostor/db";
 import { Telegraf } from "telegraf";
 import { prisma } from "@prostor/db";
 
@@ -84,7 +86,24 @@ async function configureBotMenuButton() {
   }
 }
 
+function getStartPayload(text: string) {
+  return text.replace(/^\/start(@\w+)?\s*/i, "").trim();
+}
+
 bot.start((context) => {
+  const startPayload = getStartPayload(context.message.text);
+  const telegramLoginRequestId = parseTelegramLoginStartParam(startPayload);
+
+  if (telegramLoginRequestId) {
+    return context.reply("Подтвердите вход в Простор одной кнопкой.", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "Подтвердить вход", callback_data: `login:${telegramLoginRequestId}:confirm` }],
+        ],
+      },
+    });
+  }
+
   context.reply("Простор: открой магазин или Mini App", {
     reply_markup: {
       inline_keyboard: [
@@ -109,6 +128,52 @@ bot.help((context) => {
     ].join("\n"),
     { parse_mode: "HTML" },
   );
+});
+
+bot.on("callback_query", async (context) => {
+  if (context.callbackQuery.message == null || !("data" in context.callbackQuery)) {
+    return;
+  }
+
+  const match = /^login:([A-Za-z0-9_-]+):confirm$/.exec(context.callbackQuery.data);
+
+  if (!match) {
+    return;
+  }
+
+  const requestId = match[1];
+
+  if (!requestId) {
+    return;
+  }
+
+  const from = context.callbackQuery.from;
+  const result = await confirmTelegramLoginRequest({
+    requestId,
+    telegramId: String(from.id),
+    telegramUsername: from.username,
+    firstName: from.first_name,
+    lastName: from.last_name,
+    authDate: Math.floor(Date.now() / 1000),
+  });
+
+  if (result.outcome === "missing") {
+    await context.answerCbQuery("Запрос входа не найден или уже удалён.", { show_alert: true });
+    return;
+  }
+
+  if (result.outcome === "expired") {
+    await context.answerCbQuery("Срок действия запроса истёк. Вернитесь на сайт и начните вход заново.", { show_alert: true });
+    return;
+  }
+
+  if (result.outcome === "completed" || result.outcome === "confirmed") {
+    await context.answerCbQuery("Этот вход уже подтверждён.");
+    return;
+  }
+
+  await context.answerCbQuery("Вход подтверждён.");
+  await context.reply("Готово. Вернитесь на сайт, вход завершится автоматически в открытой вкладке.");
 });
 
 bot.command("catalog", async (context) => {

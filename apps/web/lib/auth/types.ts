@@ -21,3 +21,7 @@ export type TelegramAuthInput = {
   auth_date: number;
   hash: string;
 };
+
+export type TelegramMiniAppAuthInput = TelegramAuthInput & {
+  initData: string;
+};

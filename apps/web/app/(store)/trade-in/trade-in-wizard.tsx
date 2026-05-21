@@ -31,30 +31,17 @@ type TradeInWizardProps = {
   } | null;
 };
 
-const WAITLIST_COLOR_OPTIONS = [
-  "Не важно",
-  "Black",
-  "White",
-  "Silver",
-  "Gold",
-  "Blue",
-  "Pink",
-  "Green",
-  "Purple",
-  "Graphite",
-  "Natural",
-  "Midnight",
-  "Starlight",
-  "Space Black",
-];
+const WAITLIST_COLOR_OPTIONS = ["Не важно", "Светлый", "Темный"];
 
 function getWaitlistQuestionCodes(categoryCode: string) {
   switch (categoryCode) {
     case "iphone":
     case "samsung":
       return new Set(["memory"]);
+    case "mac":
+      return new Set(["year", "cpu", "inches", "memory", "ram"]);
     case "ipad":
-      return new Set(["memory", "cellular"]);
+      return new Set(["inches", "memory", "cellular"]);
     case "apple_watch":
       return new Set(["size_mm"]);
     default:
@@ -62,13 +49,16 @@ function getWaitlistQuestionCodes(categoryCode: string) {
   }
 }
 
-function extractDisplaySizeFromTitle(value: string | undefined) {
-  if (!value) {
-    return null;
+function getWaitlistDisplayLabel(categoryCode: string, answers: Map<string, string>) {
+  if (categoryCode === "apple_watch") {
+    return { label: "Размер корпуса", value: answers.get("size_mm") ?? null };
   }
 
-  const match = value.match(/\b(11|13|40|41|42|44|45|46|49|14|15|16|24)\b/);
-  return match?.[1] ?? null;
+  if (categoryCode === "ipad" || categoryCode === "mac") {
+    return { label: "Размер", value: answers.get("inches") ?? null };
+  }
+
+  return { label: null, value: null };
 }
 
 export function TradeInWizard({
@@ -117,7 +107,16 @@ export function TradeInWizard({
     [answerSummary],
   );
   const waitlistConnectivity = answerSummaryLookup.get("cellular") ?? null;
-  const waitlistDisplaySize = answerSummaryLookup.get("size_mm") ?? extractDisplaySizeFromTitle(selectedModel?.title);
+  const waitlistDisplay = useMemo(
+    () => getWaitlistDisplayLabel(categoryCode, answerSummaryLookup),
+    [answerSummaryLookup, categoryCode],
+  );
+  const waitlistDisplaySize = waitlistDisplay.value;
+  const totalWizardStepCount = totalQuestionCount + (mode === "waitlist" ? 1 : 0);
+  const completedWizardStepCount = completedQuestionCount + (mode === "waitlist" ? 1 : 0);
+  const progressValue = mode === "waitlist" ? completedWizardStepCount : completedQuestionCount;
+  const progressTotal = mode === "waitlist" ? totalWizardStepCount : Math.max(totalQuestionCount, 1);
+  const progressValuePercent = progressTotal > 0 ? Math.round((progressValue / progressTotal) * 100) : 0;
   const submitAction = mode === "profile"
     ? addProfileDeviceAction
     : mode === "waitlist"
@@ -227,12 +226,12 @@ export function TradeInWizard({
           <p className="trade-in-wizard-copy">{intro}</p>
         </div>
         <div className="trade-in-wizard-progress glass-strong">
-          <div className="trade-in-wizard-progress-value">{progressPercent}%</div>
+          <div className="trade-in-wizard-progress-value">{progressValuePercent}%</div>
           <div className="trade-in-wizard-progress-copy">
-            {completedQuestionCount} из {Math.max(totalQuestionCount, 1)} шагов заполнено
+            {progressValue} из {progressTotal} шагов заполнено
           </div>
           <div className="trade-in-wizard-progress-bar">
-            <div className="trade-in-wizard-progress-fill" style={{ width: `${progressPercent}%` }} />
+            <div className="trade-in-wizard-progress-fill" style={{ width: `${progressValuePercent}%` }} />
           </div>
         </div>
       </div>
@@ -309,6 +308,20 @@ export function TradeInWizard({
             />
           </label>
         ))}
+
+        {mode === "waitlist" ? (
+          <label className="field field-wide trade-in-question-field">
+            <span>Шаг {totalQuestionCount + 1}. Цвет</span>
+            <GlassSelect
+              value={waitlistColor}
+              onChange={setWaitlistColor}
+              options={WAITLIST_COLOR_OPTIONS.map((option) => ({
+                value: option,
+                label: option,
+              }))}
+            />
+          </label>
+        ) : null}
       </div>
 
       <div className="result-card glass">
@@ -324,9 +337,9 @@ export function TradeInWizard({
                   <strong>{storage}</strong>
                 </div>
               ) : null}
-              {waitlistDisplaySize ? (
+              {waitlistDisplaySize && waitlistDisplay.label ? (
                 <div className="trade-in-quote-trace-row">
-                  <span>Размер</span>
+                  <span>{waitlistDisplay.label}</span>
                   <strong>{waitlistDisplaySize}</strong>
                 </div>
               ) : null}
@@ -387,18 +400,7 @@ export function TradeInWizard({
             <input name="nickname" type="text" placeholder="Например, Мой основной iPhone" defaultValue={initialProfileDevice?.nickname ?? ""} />
           </label>
         ) : mode === "waitlist" ? (
-          <label className="field field-wide">
-            <span>Цвет</span>
-            <input type="hidden" name="color" value={waitlistColor} />
-            <GlassSelect
-              value={waitlistColor}
-              onChange={setWaitlistColor}
-              options={WAITLIST_COLOR_OPTIONS.map((option) => ({
-                value: option,
-                label: option,
-              }))}
-            />
-          </label>
+          <input type="hidden" name="color" value={waitlistColor} />
         ) : (
           <>
             <label className="field">

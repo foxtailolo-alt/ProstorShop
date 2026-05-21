@@ -35,6 +35,24 @@ model User {
   updatedAt        DateTime         @updatedAt
 }
 
+model TelegramLoginRequest {
+  id               String   @id @default(cuid())
+  redirectTo       String?
+  status           String   @default("pending")
+  telegramId       String?
+  telegramUsername String?
+  firstName        String?
+  lastName         String?
+  authDate         Int?
+  confirmedAt      DateTime?
+  completedAt      DateTime?
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([status, expiresAt])
+}
+
 model Role {
   id          String           @id @default(cuid())
   code        String           @unique
